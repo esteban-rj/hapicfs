@@ -9,6 +9,7 @@ import {
   ChevronDown,
   ChevronRight,
   Clock3,
+  Code2,
   Database,
   FileText,
   Folder,
@@ -16,12 +17,18 @@ import {
   LayoutGrid,
   Layers,
   LoaderCircle,
+  Megaphone,
+  MessageSquareText,
+  Moon,
+  Palette,
+  PenTool,
   Plus,
   RefreshCw,
   Search,
   Settings,
   ShieldCheck,
   Sparkles,
+  SunMedium,
   Wrench,
   X,
 } from "lucide-react";
@@ -107,6 +114,7 @@ function App() {
   const [model, setModel] = useState("gpt-6.1-sol");
   const [effort, setEffort] = useState("xhigh");
   const [key, setKey] = useState("");
+  const [darkMode, setDarkMode] = useState(false);
   const refresh = useCallback(async () => {
     const [s, c] = await Promise.all([
       api<State>("/state"),
@@ -438,8 +446,26 @@ function App() {
       : page === "Resumen"
         ? "Tu equipo, ampliado."
         : page;
+  const agentIcon = (kind: Agent["kind"]) => {
+    switch (kind) {
+      case "hapic":
+        return <Mark small />;
+      case "ux":
+        return <PenTool size={12} />;
+      case "graphic-designer":
+        return <Palette size={12} />;
+      case "architect":
+        return <LayoutGrid size={12} />;
+      case "coder":
+        return <Code2 size={12} />;
+      case "community-manager":
+        return <Megaphone size={12} />;
+      default:
+        return <Sparkles size={12} />;
+    }
+  };
   return (
-    <>
+    <div className={darkMode ? "theme-dark" : "theme-light"}>
       <header className="topbar">
         <a
           className="brand"
@@ -492,6 +518,14 @@ function App() {
           <i />
           Local
         </span>
+        <button
+          className="icon-button theme-toggle"
+          aria-label="Cambiar tema"
+          onClick={() => setDarkMode((value) => !value)}
+          title="Cambiar tema"
+        >
+          {darkMode ? <SunMedium size={15} /> : <Moon size={15} />}
+        </button>
         <div className="avatar" title="Operador local">
           Tú
         </div>
@@ -551,8 +585,8 @@ function App() {
                             key={a.id}
                             onClick={() => openAgent(a)}
                           >
-                            <span>
-                              {a.kind === "hapic" ? "H" : a.name[0].toUpperCase()}
+                            <span className="agent-icon">
+                              {agentIcon(a.kind)}
                             </span>
                             {a.name}
                           </button>
@@ -1468,7 +1502,7 @@ function App() {
           </form>
         </Modal>
       ) : null}
-    </>
+    </div>
   );
 }
 function ProjectCard({
