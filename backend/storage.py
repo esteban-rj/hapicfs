@@ -47,6 +47,7 @@ class Store:
             CREATE TABLE IF NOT EXISTS events(id INTEGER PRIMARY KEY AUTOINCREMENT,agent_id TEXT REFERENCES agents(id),message TEXT,created_at TEXT);
             CREATE TABLE IF NOT EXISTS settings(key TEXT PRIMARY KEY,value TEXT);
             CREATE TABLE IF NOT EXISTS sessions(token TEXT PRIMARY KEY,csrf TEXT,created_at TEXT);
+            CREATE TABLE IF NOT EXISTS chat_runs(request_id TEXT PRIMARY KEY,agent_id TEXT REFERENCES agents(id),state TEXT NOT NULL,started_at TEXT NOT NULL,updated_at TEXT NOT NULL);
             CREATE TABLE IF NOT EXISTS images(id TEXT PRIMARY KEY,agent_id TEXT REFERENCES agents(id),message_id INTEGER REFERENCES messages(id),path TEXT,mime_type TEXT,created_at TEXT);
             CREATE TABLE IF NOT EXISTS connections(
                 id TEXT PRIMARY KEY,project_id TEXT NOT NULL REFERENCES projects(id),provider TEXT NOT NULL,

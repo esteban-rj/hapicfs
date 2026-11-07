@@ -81,6 +81,7 @@ function App() {
   const [page, setPage] = useState<Page>("Resumen");
   const [error, setError] = useState("");
   const [toast, setToast] = useState("");
+  const [projectActivity, setProjectActivity] = useState<{ busy: boolean; active_tasks: number; queued_tasks: number }>();
   const [modal, setModal] = useState<"org" | "project" | null>(null);
   const [busy, setBusy] = useState(false);
   const [name, setName] = useState("");
@@ -176,22 +177,32 @@ function App() {
       });
   }, [projectId, state]);
   const createDemoAgent = useCallback(async () => {
+    if (busy) return;
     const targetProjectId = projectId || projects[0]?.id;
     if (!targetProjectId) {
       newModal(org ? "project" : "org");
       return;
     }
-    const created = await post("/projects/" + targetProjectId + "/agents", {
-      name: "Agente de prueba",
-      template: "ux",
-    });
-    await refresh();
-    setProjectId(targetProjectId);
-    setAgentId(created.id);
-    setPage("Agentes");
-    setTab("Conversación");
-    setToast("Agente de prueba creado y cargado en el proyecto.");
-  }, [org, projectId, projects, refresh]);
+    setBusy(true);
+    setError("");
+    try {
+      const existing = state?.agents.find((item) => item.project_id === targetProjectId && item.kind === "ux" && item.name === "Agente de prueba");
+      const created = existing ?? await post<Agent>("/projects/" + targetProjectId + "/agents", {
+        name: "Agente de prueba",
+        template: "ux",
+      });
+      await refresh();
+      setProjectId(targetProjectId);
+      setAgentId(created.id);
+      setPage("Agentes");
+      setTab("Conversación");
+      setToast(existing ? "Agente de prueba cargado en el proyecto." : "Agente de prueba creado y cargado en el proyecto.");
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "No se pudo cargar el agente de prueba.");
+    } finally {
+      setBusy(false);
+    }
+  }, [org, projectId, projects, refresh, busy, state?.agents]);
   const loadProject = useCallback(
     (nextProjectId: string) => {
       const nextProject = state?.projects.find((item) => item.id === nextProjectId);
@@ -209,6 +220,30 @@ function App() {
     },
     [state],
   );
+
+  const coordinator = state?.agents.find((item) => item.project_id === projectId && item.kind === "hapic");
+  useEffect(() => {
+    setProjectActivity(undefined);
+    if (!coordinator) return;
+    let active = true;
+    let previouslyWorking: boolean | undefined;
+    let timer: ReturnType<typeof setTimeout>;
+    const coordinatorId = coordinator.id;
+    async function poll() {
+      try {
+        const status = await api<{ busy: boolean; active_tasks: number; queued_tasks: number }>(`/agents/${coordinatorId}/execution`);
+        if (active) {
+          const working = status.busy || status.active_tasks > 0 || status.queued_tasks > 0;
+          if (previouslyWorking && !working) setToast("La ejecución del equipo terminó. Consulta las tareas en Hapic para revisar el resultado.");
+          previouslyWorking = working;
+          setProjectActivity(status);
+        }
+      } catch { /* The chat displays connection errors when opened. */ }
+      if (active) timer = setTimeout(poll, 3000);
+    }
+    void poll();
+    return () => { active = false; clearTimeout(timer); };
+  }, [coordinator?.id]);
   useEffect(() => {
     if (projectId && !projects.some((p) => p.id === projectId)) {
       setProjectId("");
@@ -553,6 +588,7 @@ function App() {
                 ) : null}
                 <button
                   className="secondary"
+                  disabled={busy}
                   onClick={() =>
                     projectId || projects[0]
                       ? createDemoAgent()
@@ -588,6 +624,11 @@ function App() {
             ) : null}
           </div>
         </div>
+        {projectActivity && (projectActivity.busy || projectActivity.active_tasks > 0 || projectActivity.queued_tasks > 0) ? <div className="execution-status" role="status">
+          <LoaderCircle className="spin" size={16} />
+          <strong>Hapic y su equipo están trabajando · {projectActivity.active_tasks} en ejecución · {projectActivity.queued_tasks} en cola.</strong>
+          <button className="text-button" onClick={() => { if (coordinator) { setAgentId(coordinator.id); setPage("Agentes"); setTab("Conversación"); } }}>Ver tareas</button>
+        </div> : null}
         {error ? (
           <div className="error-banner" role="alert">
             <span>{error}</span>

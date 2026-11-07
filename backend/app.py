@@ -46,6 +46,7 @@ class KeyInput(BaseModel):
 
 class ChatInput(BaseModel):
     content: str = Field(min_length=1, max_length=20_000)
+    image_ids: list[str] = Field(default_factory=list, max_length=3)
     request_id: str = Field(default_factory=lambda: uid("msg"), max_length=80, pattern=r"^[a-zA-Z0-9_-]+$")
 
 
@@ -72,13 +73,40 @@ def create_app(data_dir: Path | None = None, runtime=None):
         return service.scope(request.headers.get("authorization", "").removeprefix("Bearer "))
 
     @mcp.tool()
+    def development_run(command: str, ctx: Context, timeout: int = 60) -> dict:
+        """Ejecuta shell en un Docker aislado con Python 3.14, Node 24 y npm. Solo /workspace del agente persiste; sin credenciales ni socket Docker. Máximo 120 s; salida 20000 caracteres. Instala dependencias Python en /workspace/.venv; npm en workspace. Comprueba exit_code y timed_out. No publica en Internet. Requiere Entorno de desarrollo habilitado."""
+        return service.tool(scope(ctx), "development_run", {"command": command, "timeout": timeout})
+
+    @mcp.tool()
+    def development_preview(ctx: Context, action: str = "status", command: str = "") -> dict:
+        """Vista previa local: start inicia un servidor que escuche 0.0.0.0:3000 (ejemplo: python -m http.server 3000 --bind 0.0.0.0); status devuelve URL y logs; stop lo elimina. Expira en una hora. No es hosting público ni prueba de funcionalidad. Requiere Entorno de desarrollo habilitado."""
+        return service.tool(scope(ctx), "development_preview", {"action": action, "command": command})
+
+    @mcp.tool()
+    def create_task(agent_id: str, objective: str, context: str, dependencies: list[str], expected_files: list[str], ctx: Context) -> dict:
+        """Hapic asigna y ENCOLA automáticamente trabajo local a un especialista. Devuelve inmediatamente; la cola espera las dependencias (IDs previos). Hasta 10 minutos por tarea. No autoriza efectos externos."""
+        caller = scope(ctx)
+        task = service.tasks.create(caller, agent_id, objective, context, dependencies, expected_files)
+        return service.tasks.enqueue(caller, task['id'])
+
+    @mcp.tool()
+    def list_tasks(ctx: Context) -> dict:
+        """Consulta tareas persistentes. delivered comprueba archivos, no funcionalidad. running tras interrupción requiere inspección, sin replay automático."""
+        return {"tasks": service.tasks.list(scope(ctx))}
+
+    @mcp.tool()
+    async def run_task(task_id: str, ctx: Context) -> dict:
+        """Encola una tarea local y devuelve inmediatamente. Hasta 10 minutos por tarea, dos simultáneas y una por agente. Las dependencias esperan automáticamente. No reintenta efectos ambiguos. Consulta list_tasks; no hagas bucles de espera. Solo Hapic."""
+        return service.tasks.enqueue(scope(ctx), task_id)
+
+    @mcp.tool()
     def get_ux_template(ctx: Context) -> dict:
         """Lee la plantilla UX versionada antes de crear un especialista."""
         return service.tool(scope(ctx), "get_ux_template", {})
 
     @mcp.tool()
     def create_ux_agent(name: str, ctx: Context) -> dict:
-        """Crea un agente UX en el proyecto autorizado. Pregunta antes su nombre al usuario. Devuelve estado real, no garantiza readiness."""
+        """Crea un agente UX en el proyecto autorizado. Admite un nombre descriptivo reversible. Devuelve estado real, no garantiza readiness."""
         return service.tool(scope(ctx), "create_ux_agent", {"name": name})
 
     @mcp.tool()
@@ -93,7 +121,7 @@ def create_app(data_dir: Path | None = None, runtime=None):
 
     @mcp.tool()
     def create_specialist_agent(name: str, template: str, ctx: Context, planner_id: str | None = None) -> dict:
-        """Crea un especialista con nombre indicado por el usuario. template: ux, graphic-designer, architect, coder o community-manager. Un coder requiere planner_id de un architect del mismo proyecto."""
+        """Crea un especialista con nombre explícito o descriptivo reversible. template: ux, graphic-designer, architect, coder o community-manager. Un coder requiere planner_id del mismo proyecto."""
         return service.tool(scope(ctx), "create_specialist_agent", {"name": name, "template": template, "planner_id": planner_id})
 
     @mcp.tool()
@@ -166,8 +194,14 @@ def create_app(data_dir: Path | None = None, runtime=None):
         # Interrupted provisioning becomes retryable after a control-plane restart.
         store.execute("UPDATE agents SET status='pending',error='La plataforma se reinició durante la provisión. Comprueba el runtime y reintenta.' WHERE status='provisioning'")
         store.execute("UPDATE video_jobs SET status='submission_unknown',error='La plataforma se reinició durante el envío. Reutiliza el mismo request_id y contenido para recuperar el trabajo.' WHERE status='submitting'")
+        store.execute("UPDATE chat_runs SET state='interrupted',updated_at=? WHERE state='running'", (now(),))
+        store.execute("UPDATE tasks SET state='failed',result=?,updated_at=? WHERE state='running'", ('La plataforma se reinició durante la tarea; revisa avances antes de repetir.', now()))
+        service.tasks.start()
         async with mcp.session_manager.run():
-            yield
+            try:
+                yield
+            finally:
+                service.tasks.stop()
 
     app = FastAPI(title="Hapic", lifespan=lifespan, docs_url=None, redoc_url=None, openapi_url=None)
     app.state.service = service
@@ -352,10 +386,31 @@ def create_app(data_dir: Path | None = None, runtime=None):
     def messages(agent_id: str):
         return service.messages(agent_id)
 
+    @app.get("/api/agents/{agent_id}/execution")
+    def execution(agent_id: str):
+        return service.execution(agent_id)
+
+    @app.get("/api/agents/{agent_id}/preview/open")
+    def open_preview(agent_id: str):
+        status = service.tool(service.agent(agent_id), "development_preview", {"action": "status"})
+        if status.get("status") != "running" or not status.get("url"):
+            raise RuntimeUnavailable("La vista previa está detenida. Pide al agente que la inicie.")
+        return RedirectResponse(status["url"], status_code=302)
+
     @app.get("/api/agents/{agent_id}/events")
     def events(agent_id: str):
         service.agent(agent_id)
         return store.all("SELECT * FROM events WHERE agent_id=? ORDER BY id DESC LIMIT 100", (agent_id,))
+
+    @app.post("/api/agents/{agent_id}/images", status_code=201)
+    async def upload_image(agent_id: str, request: Request):
+        service.agent(agent_id)
+        data = bytearray()
+        async for chunk in request.stream():
+            data.extend(chunk)
+            if len(data) > 8 * 1024 * 1024:
+                raise HTTPException(413, "Cada imagen debe pesar como máximo 8 MB.")
+        return service.upload_image(agent_id, bytes(data))
 
     @app.post("/api/agents/{agent_id}/chat")
     async def chat(agent_id: str, body: ChatInput):
@@ -369,34 +424,67 @@ def create_app(data_dir: Path | None = None, runtime=None):
         lock = service.lock(agent_id)
         if not lock.acquire(blocking=False):
             raise HTTPException(409, "Hay un turno o una provisión en curso. Espera a que termine.")
+        run_started = False
         try:
             previous = store.setting("reply-" + body.request_id)
             if previous:
-                if previous["agent_id"] != agent_id or previous["input"] != body.content:
+                if previous["agent_id"] != agent_id or previous["input"] != body.content or previous.get("image_ids", []) != body.image_ids:
                     raise HTTPException(409, "El identificador ya pertenece a otro turno.")
                 return previous["result"]
             # Store input once; Hermes Idempotency-Key prevents duplicate side effects on retry.
             prior_input = store.setting("input-" + body.request_id)
             identity = {"agent_id": agent_id, "content": body.content}
+            if body.image_ids:
+                identity["image_ids"] = body.image_ids
             if prior_input and prior_input != identity:
                 raise HTTPException(409, "El identificador ya pertenece a otro turno.")
             if not prior_input:
-                store.message(agent_id, "user", body.content, "user")
+                rows = service.chat_images(agent_id, body.image_ids)
+                with store.db() as db:
+                    message_id = db.execute("INSERT INTO messages(agent_id,role,content,source,created_at) VALUES (?,?,?,?,?)", (agent_id, "user", body.content, "user", now())).lastrowid
+                    for row in rows:
+                        db.execute("UPDATE images SET message_id=? WHERE id=?", (message_id, row["id"]))
                 store.set_setting("input-" + body.request_id, identity)
-            answer, status = await service.runtime.chat(agent, store, body.content, body.request_id)
+            store.execute("INSERT INTO chat_runs VALUES (?,?,?,?,?) ON CONFLICT(request_id) DO UPDATE SET state='running',updated_at=excluded.updated_at", (body.request_id, agent_id, "running", now(), now()))
+            run_started = True
+            if body.image_ids:
+                answer, status = await service.runtime.chat(agent, store, body.content, body.request_id, image_ids=body.image_ids)
+            else:
+                answer, status = await service.runtime.chat(agent, store, body.content, body.request_id)
             store.message(agent_id, "assistant", answer)
             result = {"content": answer, "status": status}
-            store.set_setting("reply-" + body.request_id, {"agent_id": agent_id, "input": body.content, "result": result})
+            store.set_setting("reply-" + body.request_id, {"agent_id": agent_id, "input": body.content, "image_ids": body.image_ids, "result": result})
+            store.execute("UPDATE chat_runs SET state='completed',updated_at=? WHERE request_id=?", (now(), body.request_id))
             return result
         except RuntimeUnavailable as exc:
             store.event(agent_id, str(exc))
             raise
         finally:
+            if run_started:
+                store.execute("UPDATE chat_runs SET state='failed',updated_at=? WHERE request_id=? AND state='running'", (now(), body.request_id))
             lock.release()
 
     @app.get("/api/projects/{project_id}/tree")
     def tree(project_id: str):
         return service.tree(project_id)
+
+    @app.get("/api/projects/{project_id}/tasks")
+    def project_tasks(project_id: str):
+        service.project(project_id)
+        coordinator = store.one("SELECT * FROM agents WHERE project_id=? AND kind='hapic'", (project_id,))
+        return {"tasks": service.tasks.list(coordinator)}
+
+    @app.get("/api/projects/{project_id}/artifacts")
+    def artifacts(project_id: str):
+        from .artifacts import list_artifacts
+        return list_artifacts(service, project_id)
+
+    @app.get("/api/projects/{project_id}/artifacts/open")
+    def open_artifact(project_id: str, path: str, download: bool = False):
+        from .artifacts import artifact_file
+        file, mime = artifact_file(service, project_id, path)
+        # Code and HTML are shown as plain text, never executed in the app origin.
+        return FileResponse(file, media_type=mime, filename=file.name, content_disposition_type="attachment" if download else "inline")
 
     @app.get("/api/projects/{project_id}/file")
     def read_file(project_id: str, path: str):

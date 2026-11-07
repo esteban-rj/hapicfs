@@ -113,7 +113,7 @@ export type IntegrationTool = {
   name: string;
   description: string;
   provider: string;
-  access: "read" | "generate";
+  access: "read" | "generate" | "execute";
   requires_connection: boolean;
   actions: string[];
 };

@@ -5,6 +5,8 @@ Set-Location -LiteralPath $taskRoot
 if (-not (Get-Command docker -ErrorAction SilentlyContinue)) { throw 'Docker no está disponible. Instala e inicia Docker Desktop antes de continuar.' }
 docker info --format '{{.OSType}}'
 if ($LASTEXITCODE -ne 0) { throw 'El motor Docker no responde.' }
+docker build -t hapic-runner:local -f runner/Dockerfile runner
+if ($LASTEXITCODE -ne 0) { throw 'No se pudo construir el entorno de desarrollo.' }
 $env:HAPIC_HOST_DATA_DIR = (Join-Path $taskRoot '.hapic').Replace('\','/')
 New-Item -ItemType Directory -Force -Path $env:HAPIC_HOST_DATA_DIR | Out-Null
 if ($YouTubeClientJson) {

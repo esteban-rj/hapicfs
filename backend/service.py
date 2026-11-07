@@ -69,10 +69,35 @@ class Service:
         self.heygen = HeyGen(store, self.project)
         self.locks = {}
         self.locks_guard = threading.Lock()
+        from .tasks import Tasks
+        self.tasks = Tasks(self)
+        from .development import Development
+        self.development = Development(self)
+        # Existing coders gain the default once; explicit disabled bindings survive restarts.
+        self.store.execute("INSERT OR IGNORE INTO agent_tools(agent_id,tool_id,connection_id,enabled) SELECT id,'development',NULL,1 FROM agents WHERE kind='coder'")
+        self.store.execute("INSERT OR IGNORE INTO agent_tools(agent_id,tool_id,connection_id,enabled) SELECT id,'heygen',NULL,1 FROM agents WHERE kind='community-manager'")
 
     def lock(self, agent_id):
         with self.locks_guard:
             return self.locks.setdefault(agent_id, threading.Lock())
+
+    def execution(self, agent_id):
+        agent = self.agent(agent_id)
+        tasks = self.store.all("SELECT t.*,a.name AS agent_name FROM tasks t JOIN agents a ON a.id=t.agent_id WHERE t.project_id=? ORDER BY t.rowid", (agent["project_id"],))
+        if agent["kind"] != "hapic":
+            tasks = [task for task in tasks if task["agent_id"] == agent_id]
+        for task in tasks:
+            task["objective"] = json.loads(task["contract"])["objective"]
+            task["executing"] = task["state"] == "running" and self.lock(task["agent_id"]).locked()
+            event = self.store.one("SELECT message,created_at FROM events WHERE agent_id=? AND created_at>=? ORDER BY id DESC LIMIT 1", (task["agent_id"], task["updated_at"]))
+            task["latest_activity"] = event["message"] if event else None
+            task["activity_at"] = event["created_at"] if event else None
+            task.pop("contract")
+        run = self.store.one("SELECT * FROM chat_runs WHERE agent_id=? ORDER BY rowid DESC LIMIT 1", (agent_id,))
+        busy = self.lock(agent_id).locked()
+        return {"busy": busy, "provisioning": agent["status"] == "provisioning", "run": run,
+                "tasks": tasks, "active_tasks": sum(task["executing"] for task in tasks),
+                "queued_tasks": sum(task["state"] == "queued" for task in tasks), "task_timeout_seconds": 600, "max_concurrent_tasks": 2}
 
     def project(self, project_id, user="local-owner"):
         result = self.store.one("SELECT p.* FROM projects p JOIN memberships m ON m.organization_id=p.organization_id WHERE p.id=? AND m.user_id=?", (project_id, user))
@@ -128,7 +153,7 @@ class Service:
         except sqlite3.IntegrityError:
             raise ValueError("Ya existe un agente con ese nombre en el proyecto.") from None
         for tool_id in defaults(kind):
-            connections = self.integration(tool_id).connections(project_id)
+            connections = self.integration(tool_id).connections(project_id) if CATALOG[tool_id]["requires_connection"] else []
             selected = [c for c in connections if c["status"] == "connected"]
             connection_id = selected[0]["id"] if len(selected) == 1 else None
             self.store.execute("INSERT INTO agent_tools VALUES (?,?,?,1)", (agent["id"], tool_id, connection_id))
@@ -203,6 +228,8 @@ class Service:
         agent = self.agent(agent_id)
         if tool_id not in CATALOG:
             raise ValueError("Selecciona una herramienta disponible en el catálogo.")
+        if connection_id and not CATALOG[tool_id]["requires_connection"]:
+            raise ValueError("Esta herramienta no requiere una conexión externa.")
         if connection_id:
             connection = self.integration(CATALOG[tool_id]["provider"]).connection(agent["project_id"], connection_id, active=False)
             if connection["provider"] != CATALOG[tool_id]["provider"] or connection["status"] == "disconnected":
@@ -221,6 +248,8 @@ class Service:
                     self.store.execute("DELETE FROM agent_tools WHERE agent_id=? AND tool_id=?", (agent_id, tool_id))
                 raise RuntimeUnavailable("No se pudo preparar el perfil con estas herramientas. Se conservó la asignación anterior.") from None
             self.store.event(agent_id, f"Herramienta {CATALOG[tool_id]['name']} {'habilitada' if enabled else 'deshabilitada'} por el operador.")
+            if tool_id == "development" and not enabled:
+                self.development.preview(agent, "stop")
             return {"tool_id": tool_id, "enabled": enabled, "connection_id": connection_id, "runtime_restart_required": bool(agent["container_id"])}
         finally:
             self.lock(agent_id).release()
@@ -230,6 +259,15 @@ class Service:
         project = self.project(agent["project_id"])
         if name not in effective_tools(agent, self.store):
             raise PermissionError("Herramienta fuera del alcance autorizado.")
+        if name in CATALOG["development"]["actions"]:
+            with self.lock("development-" + agent["id"]), self.lock("plan-" + agent["planner_id"]) if agent["kind"] == "coder" else nullcontext():
+                # Commands can write code too, so enforce the same architecture contract.
+                if agent["kind"] == "coder" and (name == "development_run" or args.get("action") == "start"):
+                    if self.store.setting("plan-read-" + agent["id"]) != self.architecture_plan(agent)["revision"]:
+                        raise ValueError("Lee el plan vigente con get_architecture_plan antes de ejecutar código.")
+                if name == "development_run":
+                    return self.development.run(agent, args["command"], args.get("timeout", 60))
+                return self.development.preview(agent, args.get("action", "status"), args.get("command", ""))
         if name in CATALOG["youtube"]["actions"]:
             binding = self.store.one("SELECT * FROM agent_tools WHERE agent_id=? AND tool_id='youtube' AND enabled=1", (agent["id"],))
             if not binding or not binding["connection_id"]:
@@ -318,6 +356,8 @@ class Service:
             if agent["kind"] == "coder" and self.store.setting("plan-read-" + agent["id"]) != self.architecture_plan(agent)["revision"]:
                 raise ValueError("Lee el plan vigente con get_architecture_plan antes de escribir código.")
             atomic_write(path, content.encode("utf-8"))
+            if "development_run" in effective_tools(agent, self.store):
+                self.development.own_file(agent, path)
         self.store.event(agent["id"], f"Archivo guardado en el workspace: {args['path']}")
         return {"path": args["path"], "bytes": path.stat().st_size, "saved": True}
 
@@ -360,6 +400,22 @@ class Service:
         videos = self.store.all("SELECT * FROM video_jobs WHERE agent_id=? AND path IS NOT NULL ORDER BY created_at", (agent_id,))
         for item in videos:
             by_message.setdefault(item["message_id"], []).append({"id": item["id"], "path": item["path"], "name": Path(item["path"]).name, "mime_type": "video/mp4", "url": f"/api/projects/{agent['project_id']}/video?" + urlencode({"path": item["path"]})})
+        from .artifacts import describe
+        receipts = self.store.all("SELECT n.message_id,t.agent_id,t.result FROM task_notifications n JOIN tasks t ON n.task_id=t.id WHERE n.state='delivered' AND t.project_id=?", (agent['project_id'],))
+        for receipt in receipts:
+            owner = self.agent(receipt['agent_id'])
+            result = json.loads(receipt['result'] or '{}')
+            ids = [receipt['message_id']] if agent['kind'] == 'hapic' else [m['id'] for m in messages if m['source'] == 'task' and m['content'] == result.get('answer') and owner['id'] == agent_id]
+            for evidence in result.get('evidence', []):
+                relative = f"agents/{owner['id']}/workspace/{evidence['path']}"
+                try:
+                    artifact = describe(self, agent['project_id'], relative, owner)
+                except (ValueError, LookupError, OSError):
+                    continue
+                for message_id in ids:
+                    items = by_message.setdefault(message_id, [])
+                    if not any(item['path'] == relative for item in items):
+                        items.append(artifact)
         return [{**message, "attachments": by_message.get(message["id"], [])} for message in messages]
 
     def video_file(self, project_id, relative):
@@ -373,17 +429,53 @@ class Service:
                 raise ValueError("El archivo no contiene un vídeo MP4 válido.")
         return path, "video/mp4"
 
+    def upload_image(self, agent_id, data):
+        agent = self.agent(agent_id)
+        if not data or len(data) > 8 * 1024 * 1024:
+            raise ValueError("Cada imagen debe pesar como máximo 8 MB.")
+        mime = image_type(data)
+        if mime == "image/gif":
+            raise ValueError("Usa una imagen PNG, JPEG o WebP.")
+        suffix = {"image/png": ".png", "image/jpeg": ".jpg", "image/webp": ".webp"}[mime]
+        image_id = uid("upload")
+        relative = f"uploads/{image_id}{suffix}"
+        path = safe_path(self.store.agent_path(agent) / "workspace", relative, writing=True, image=True)
+        atomic_write(path, data)
+        project_relative = f"agents/{agent_id}/workspace/{relative}"
+        self.store.execute("INSERT INTO images VALUES (?,?,?,?,?,?)", (image_id, agent_id, None, project_relative, mime, now()))
+        return {"id": image_id, "path": project_relative, "mime_type": mime,
+                "name": path.name, "url": f"/api/projects/{agent['project_id']}/image?" + urlencode({"path": project_relative})}
+
+    def chat_images(self, agent_id, ids, message_id=None):
+        agent = self.agent(agent_id)
+        if len(ids) > 3 or len(set(ids)) != len(ids):
+            raise ValueError("Adjunta como máximo tres imágenes distintas.")
+        rows = []
+        for image_id in ids:
+            row = self.store.one("SELECT * FROM images WHERE id=? AND agent_id=?", (image_id, agent_id))
+            if not row or not image_id.startswith("upload_") or (row["message_id"] is not None and row["message_id"] != message_id):
+                raise ValueError("Imagen no disponible para este mensaje o agente.")
+            self.image_file(agent["project_id"], row["path"])
+            rows.append(row)
+        return rows
+
     def tree(self, project_id):
         project = self.project(project_id)
         root = self.store.project_path(project)
         count = 0
+        technical_count = 0
 
         def visit(path, depth=0):
-            nonlocal count
-            count += 1
+            nonlocal count, technical_count
             relative = path.relative_to(root).as_posix()
+            parts = Path(relative).parts
+            technical = len(parts) >= 3 and parts[0] == 'agents' and parts[2] == 'hermes'
+            if technical:
+                technical_count += 1
+            else:
+                count += 1
             node = {"name": path.name, "path": relative, "type": "directory" if path.is_dir() else "file"}
-            if path.is_dir() and depth < 8 and count < 600:
+            if path.is_dir() and depth < 8 and (technical_count < 150 if technical else count < 600):
                 node["children"] = [visit(p, depth + 1) for p in sorted(path.iterdir(), key=lambda p: (not p.is_dir(), p.name)) if not p.is_symlink() and not getattr(p, "is_junction", lambda: False)() and not p.name.startswith(".") and p.name not in HIDDEN_NAMES and not p.name.startswith("auth")][:150]
             elif path.is_file():
                 node["size"] = path.stat().st_size

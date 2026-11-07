@@ -47,6 +47,105 @@ def project(client):
     return client.post(f"/api/organizations/{org['id']}/projects", json={"name": "Producto"}).json()
 
 
+def test_execution_survives_view_reads_and_prevents_duplicate_turn(client, app):
+    import asyncio
+    import threading
+    from concurrent.futures import ThreadPoolExecutor
+    from unittest.mock import AsyncMock
+    project(client)
+    agent = client.get("/api/state").json()["agents"][0]
+    app.state.store.execute("UPDATE agents SET container_id='test' WHERE id=?", (agent["id"],))
+    started, release = threading.Event(), threading.Event()
+
+    async def running(*args, **kwargs):
+        started.set()
+        while not release.is_set():
+            await asyncio.sleep(0.01)
+        return "Trabajo terminado", "completed"
+
+    path = f"/api/agents/{agent['id']}"
+    with patch.object(app.state.store, "api_key", return_value="test"), patch.object(app.state.service.runtime, "chat", new=AsyncMock(side_effect=running)):
+        with ThreadPoolExecutor() as executor:
+            request = executor.submit(client.post, path + "/chat", json={"content": "Trabaja", "request_id": "persistent-turn"})
+            try:
+                assert started.wait(5)
+                for _ in range(2):
+                    status = client.get(path + "/execution").json()
+                    assert status["busy"] and status["run"]["state"] == "running"
+                    assert client.get(path + "/messages").json()[-1]["content"] == "Trabaja"
+                assert client.post(path + "/chat", json={"content": "Duplicado"}).status_code == 409
+            finally:
+                release.set()
+            assert request.result(timeout=5).status_code == 200
+    status = client.get(path + "/execution").json()
+    assert not status["busy"] and status["run"]["state"] == "completed"
+    assert client.get(path + "/messages").json()[-1]["content"] == "Trabajo terminado"
+
+
+def test_execution_lists_real_assignees_and_distinguishes_unconfirmed_running(client, app):
+    p = project(client)
+    service = app.state.service
+    coordinator = service.store.one("SELECT * FROM agents WHERE project_id=? AND kind='hapic'", (p["id"],))
+    architect = service.create_agent(p["id"], "Planificador", "architect")
+    task = service.tasks.create(coordinator, architect["id"], "Plan", "", [], ["plan.md"])
+    service.store.execute("UPDATE tasks SET state='running' WHERE id=?", (task["id"],))
+    path = f"/api/agents/{coordinator['id']}/execution"
+    assert not client.get(path).json()["tasks"][0]["executing"]
+    with service.lock(architect["id"]):
+        status = client.get(path).json()
+        assert status["active_tasks"] == 1
+        assert status["tasks"][0]["agent_name"] == "Planificador"
+        assert status["tasks"][0]["objective"] == "Plan"
+    other = project(client)
+    other_agent = service.store.one("SELECT * FROM agents WHERE project_id=?", (other["id"],))
+    assert client.get(f"/api/agents/{other_agent['id']}/execution").json()["tasks"] == []
+
+
+def test_execution_records_failure_and_reconciles_restart(client, app):
+    from unittest.mock import AsyncMock
+    project(client)
+    agent = client.get("/api/state").json()["agents"][0]
+    app.state.store.execute("UPDATE agents SET container_id='test' WHERE id=?", (agent["id"],))
+    path = f"/api/agents/{agent['id']}"
+    with patch.object(app.state.store, "api_key", return_value="test"), patch.object(app.state.service.runtime, "chat", new=AsyncMock(side_effect=RuntimeUnavailable("Proveedor no disponible"))):
+        assert client.post(path + "/chat", json={"content": "Prueba", "request_id": "failure-visible"}).status_code == 503
+    status = client.get(path + "/execution").json()
+    assert not status["busy"] and status["run"]["state"] == "failed"
+    app.state.store.execute("UPDATE chat_runs SET state='running' WHERE request_id='failure-visible'")
+    with TestClient(create_app(app.state.store.root, TestRuntime()), base_url="http://localhost") as reloaded:
+        reloaded.get("/api/bootstrap")
+        status = reloaded.get(path + "/execution").json()
+        assert not status["busy"] and status["run"]["state"] == "interrupted"
+
+
+def test_uploaded_images_are_scoped_persisted_and_sent_to_chat(client, app):
+    p = project(client)
+    agent = client.get("/api/state").json()["agents"][0]
+    png = base64.b64decode("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+a9uoAAAAASUVORK5CYII=")
+    uploaded = client.post(f"/api/agents/{agent['id']}/images", content=png)
+    assert uploaded.status_code == 201
+    image = uploaded.json()
+    assert client.get(image["url"]).content == png
+    assert client.post(f"/api/agents/{agent['id']}/images", content=b"not an image").status_code == 400
+    other = project(client)
+    other_agent = next(a for a in client.get("/api/state").json()["agents"] if a["project_id"] == other["id"])
+    with pytest.raises(ValueError):
+        app.state.service.chat_images(other_agent["id"], [image["id"]])
+    app.state.store.execute("UPDATE agents SET container_id='test-container' WHERE id=?", (agent["id"],))
+    from unittest.mock import AsyncMock
+    with patch.object(app.state.store, "api_key", return_value="test-key"), patch.object(app.state.service.runtime, "chat", new_callable=AsyncMock) as chat:
+        chat.return_value = ("Veo una imagen", "completed")
+        body = {"content": "Analiza esta referencia", "image_ids": [image["id"]], "request_id": "upload-test"}
+        assert client.post(f"/api/agents/{agent['id']}/chat", json=body).status_code == 200
+        assert chat.call_args.kwargs["image_ids"] == [image["id"]]
+        assert client.post(f"/api/agents/{agent['id']}/chat", json=body).status_code == 200
+        assert chat.await_count == 1
+        assert client.post(f"/api/agents/{agent['id']}/chat", json={**body, "image_ids": []}).status_code == 409
+    messages = client.get(f"/api/agents/{agent['id']}/messages").json()
+    assert messages[0]["attachments"][0]["id"] == image["id"]
+    assert Service(Store(app.state.store.root), TestRuntime()).messages(agent["id"])[0]["attachments"]
+
+
 def test_organization_project_hapic_persist_after_restart(client, app):
     p = project(client)
     state = client.get("/api/state").json()

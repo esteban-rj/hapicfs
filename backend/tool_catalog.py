@@ -11,6 +11,12 @@ CATALOG = {
         "requires_connection": True,
         "actions": ["heygen_generate_video", "heygen_get_video", "heygen_list_videos"],
     },
+    "development": {
+        "id": "development", "name": "Entorno de desarrollo", "provider": "docker",
+        "description": "Python y Node: instala dependencias, ejecuta código y pruebas y abre una vista previa local del workspace del agente.",
+        "access": "execute", "requires_connection": False,
+        "actions": ["development_run", "development_preview"],
+    },
     "youtube": {
         "id": "youtube",
         "name": "YouTube",
@@ -24,7 +30,7 @@ CATALOG = {
 
 
 def defaults(kind):
-    return ["youtube", "heygen"] if kind == "community-manager" else []
+    return ["development"] if kind == "coder" else (["youtube", "heygen"] if kind == "community-manager" else [])
 
 
 def effective_tools(agent, store):

@@ -28,13 +28,13 @@ function AssignmentForm({ agent, tool, binding, connections, busy, onSave }: {
       <input id={labelId} type="checkbox" checked={enabled} disabled={busy} onChange={(event) => setEnabled(event.target.checked)} />
       Habilitar {tool.name}
     </label>
-    <label htmlFor={`${labelId}-connection`}>{tool.provider === "youtube" ? "Canal" : "Cuenta"} para {agent.name}</label>
+    {tool.requires_connection ? <><label htmlFor={`${labelId}-connection`}>{tool.provider === "youtube" ? "Canal" : "Cuenta"} para {agent.name}</label>
     <select id={`${labelId}-connection`} value={connectionId} disabled={busy || !enabled} onChange={(event) => setConnectionId(event.target.value)}>
       <option value="">Seleccionar {tool.provider === "youtube" ? "canal" : "cuenta"}</option>
       {connections.filter((item) => item.provider === tool.provider).map((item) => <option key={item.id} value={item.id}>{item.account_name}{item.status !== "connected" ? " · Reconectar" : ""}</option>)}
-    </select>
+    </select></> : <p>Workspace propio · Python y Node · ejecución en Docker</p>}
     <div className="tool-assignment-footer">
-      <span>{!enabled ? "Deshabilitada" : connectionId ? tool.access === "read" ? "Solo lectura" : "Generación facturable" : "Pendiente de conexión"}</span>
+      <span>{!enabled ? "Deshabilitada" : !tool.requires_connection ? "Ejecución habilitada" : connectionId ? tool.access === "read" ? "Solo lectura" : "Generación facturable" : "Pendiente de conexión"}</span>
       <button className="secondary" disabled={busy || !changed} type="submit"><Check size={14} /> Guardar</button>
     </div>
   </form>;
@@ -119,6 +119,14 @@ export function ToolsPanel({ projects, agents, selectedProjectId, onSelectProjec
         {projects.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
       </select>
     </div>
+
+    {catalog.filter((tool) => tool.id === "development").map((tool) => <section key={tool.id} className="card tool-integration">
+      <div className="card-title"><strong>{tool.name}</strong><span className="tag">Docker local</span></div>
+      <div className="tool-body">
+        <p>{tool.description}</p>
+        <p>Habilitado por defecto para Coder. Cada agente usa solo sus archivos. La vista previa caduca en una hora. Después de cambiar la asignación, reinicia el runtime del agente para actualizar sus herramientas.</p>
+      </div>
+    </section>)}
 
     <section className="card tool-integration">
       <div className="card-title"><Youtube size={20} /><strong>YouTube</strong><span className="tag">Solo lectura</span></div>
