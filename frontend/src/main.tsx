@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useEffect, useState, useMemo } from "react";
 import { createRoot } from "react-dom/client";
 import {
   ArrowRight,
@@ -158,6 +158,57 @@ function App() {
         (!projectId || a.project_id === projectId),
     ) || [];
   const agent = agents.find((a) => a.id === agentId);
+  const flowAgents = useMemo(() => {
+    if (!projectId || !state) return [];
+    return [...state.agents]
+      .filter((item) => item.project_id === projectId)
+      .sort((left, right) => {
+        const rank = (item: (typeof state.agents)[number]) => {
+          if (item.kind === "hapic") return 0;
+          if (item.kind === "architect") return 1;
+          if (item.kind === "coder") return 2;
+          if (item.kind === "ux") return 3;
+          if (item.kind === "graphic-designer") return 4;
+          if (item.kind === "community-manager") return 5;
+          return 6;
+        };
+        return rank(left) - rank(right);
+      });
+  }, [projectId, state]);
+  const createDemoAgent = useCallback(async () => {
+    const targetProjectId = projectId || projects[0]?.id;
+    if (!targetProjectId) {
+      newModal(org ? "project" : "org");
+      return;
+    }
+    const created = await post("/projects/" + targetProjectId + "/agents", {
+      name: "Agente de prueba",
+      template: "ux",
+    });
+    await refresh();
+    setProjectId(targetProjectId);
+    setAgentId(created.id);
+    setPage("Agentes");
+    setTab("Conversación");
+    setToast("Agente de prueba creado y cargado en el proyecto.");
+  }, [org, projectId, projects, refresh]);
+  const loadProject = useCallback(
+    (nextProjectId: string) => {
+      const nextProject = state?.projects.find((item) => item.id === nextProjectId);
+      if (!nextProject) return;
+      setOrgId(nextProject.organization_id);
+      setProjectId(nextProject.id);
+      const hapic = state?.agents.find(
+        (a) => a.project_id === nextProject.id && a.kind === "hapic",
+      );
+      setAgentId(hapic?.id || "");
+      setTab("Conversación");
+      setFile(undefined);
+      setPage("Agentes");
+      setToast("Proyecto cargado: " + nextProject.name);
+    },
+    [state],
+  );
   useEffect(() => {
     if (projectId && !projects.some((p) => p.id === projectId)) {
       setProjectId("");
@@ -404,13 +455,11 @@ function App() {
               <Plus size={14} />
             </button>
           </div>
-          {projects.length ? (
+          {projects.length > 0 ? (
             projects.map((p) => (
               <div key={p.id}>
                 <button
-                  className={
-                    "project-nav " + (projectId === p.id ? "current" : "")
-                  }
+                  className={"project-nav " + (projectId === p.id ? "current" : "")}
                   onClick={() => openProject(p)}
                 >
                   <Folder size={15} />
@@ -421,9 +470,7 @@ function App() {
                       .filter((a) => a.project_id === p.id)
                       .map((a) => (
                         <button
-                          className={
-                            "agent-nav " + (a.id === agentId ? "current" : "")
-                          }
+                          className={"agent-nav " + (a.id === agentId ? "current" : "")}
                           key={a.id}
                           onClick={() => openAgent(a)}
                         >
@@ -483,6 +530,40 @@ function App() {
             </p>
           </div>
           <div className="page-actions">
+            {(page === "Resumen" || page === "Agentes") && (
+              <>
+                {projects.length ? (
+                  <select
+                    className="project-loader-select"
+                    value={projectId || ""}
+                    onChange={(e) => {
+                      if (e.target.value) {
+                        loadProject(e.target.value);
+                      }
+                    }}
+                    aria-label="Proyecto cargado"
+                  >
+                    <option value="">Selecciona un proyecto</option>
+                    {projects.map((item) => (
+                      <option key={item.id} value={item.id}>
+                        {item.name}
+                      </option>
+                    ))}
+                  </select>
+                ) : null}
+                <button
+                  className="secondary"
+                  onClick={() =>
+                    projectId || projects[0]
+                      ? createDemoAgent()
+                      : newModal(org ? "project" : "org")
+                  }
+                >
+                  <Sparkles size={15} />
+                  Agente de prueba
+                </button>
+              </>
+            )}
             {page === "Resumen" || page === "Proyectos" ? (
               <button
                 className="primary"
@@ -813,6 +894,37 @@ function App() {
                         )}
                         {agent.planner_id ? <div className="card compact-card"><h3>Arquitecto vinculado</h3><p>{state.agents.find((a) => a.id === agent.planner_id)?.name}</p><p>Lee su plan publicado antes de escribir código.</p></div> : null}
                         <button className="secondary" onClick={() => setPage("Plantillas")}><Plus size={15} /> Añadir especialista</button>
+                        <div className="card flow-card">
+                          <div className="card-title">
+                            <Layers size={17} />
+                            Flujo de agentes
+                          </div>
+                          <div className="flow-list">
+                            {flowAgents.length ? (
+                              flowAgents.map((item, index) => (
+                                <div key={item.id} className="flow-item">
+                                  <div className="flow-connector">
+                                    {index < flowAgents.length - 1 ? <span /> : null}
+                                  </div>
+                                  <button
+                                    className={"flow-node " + (item.id === agentId ? "active" : "")}
+                                    onClick={() => openAgent(item)}
+                                  >
+                                    <span className="agent-letter small-letter">
+                                      {item.kind === "hapic" ? "H" : item.name[0].toUpperCase()}
+                                    </span>
+                                    <div>
+                                      <strong>{item.name}</strong>
+                                      <small>{agentRoles[item.kind]}</small>
+                                    </div>
+                                  </button>
+                                </div>
+                              ))
+                            ) : (
+                              <p className="muted flow-empty">Sin agentes en este proyecto aún.</p>
+                            )}
+                          </div>
+                        </div>
                         <RuntimeCard agent={agent} runtime={runtime} />
                       </div>
                     </div>
