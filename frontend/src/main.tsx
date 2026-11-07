@@ -18,6 +18,7 @@ import {
   LoaderCircle,
   Plus,
   RefreshCw,
+  Search,
   Settings,
   ShieldCheck,
   Sparkles,
@@ -54,6 +55,10 @@ import {
 import "./style.css";
 import { ModelSelect } from "./ModelSelect";
 import { ToolsPanel } from "./ToolsPanel";
+import { TeamDemo } from "./TeamDemo";
+
+type TeamTask = { id: string; agent_id: string; agent_name: string; objective: string; state: string; executing: boolean; latest_activity: string | null };
+type TeamExecution = { busy: boolean; active_tasks: number; queued_tasks: number; tasks?: TeamTask[]; busy_agents?: string[] };
 
 type Page =
   | "Resumen"
@@ -81,7 +86,7 @@ function App() {
   const [page, setPage] = useState<Page>("Resumen");
   const [error, setError] = useState("");
   const [toast, setToast] = useState("");
-  const [projectActivity, setProjectActivity] = useState<{ busy: boolean; active_tasks: number; queued_tasks: number }>();
+  const [projectActivity, setProjectActivity] = useState<TeamExecution>();
   const [modal, setModal] = useState<"org" | "project" | null>(null);
   const [busy, setBusy] = useState(false);
   const [name, setName] = useState("");
@@ -98,6 +103,7 @@ function App() {
   const [tab, setTab] = useState<"Conversación" | "Archivos" | "Actividad">(
     "Conversación",
   );
+  const [expandedProjects, setExpandedProjects] = useState<Record<string, boolean>>({});
   const [model, setModel] = useState("gpt-6.1-sol");
   const [effort, setEffort] = useState("xhigh");
   const [key, setKey] = useState("");
@@ -231,12 +237,12 @@ function App() {
     const coordinatorId = coordinator.id;
     async function poll() {
       try {
-        const status = await api<{ busy: boolean; active_tasks: number; queued_tasks: number }>(`/agents/${coordinatorId}/execution`);
+        const status = await api<TeamExecution>(`/agents/${coordinatorId}/execution`);
         if (active) {
           const working = status.busy || status.active_tasks > 0 || status.queued_tasks > 0;
           if (previouslyWorking && !working) setToast("La ejecución del equipo terminó. Consulta las tareas en Hapic para revisar el resultado.");
           previouslyWorking = working;
-          setProjectActivity(status);
+          setProjectActivity({...status, busy_agents: status.busy ? [coordinatorId] : []});
         }
       } catch { /* The chat displays connection errors when opened. */ }
       if (active) timer = setTimeout(poll, 3000);
@@ -244,6 +250,37 @@ function App() {
     void poll();
     return () => { active = false; clearTimeout(timer); };
   }, [coordinator?.id]);
+  const directoryCoordinators = state?.agents.filter(a => a.organization_id === orgId && a.kind === "hapic").map(a => a.id).join(",") || "";
+  useEffect(() => {
+    if (page !== "Agentes" || agentId || projectId || !directoryCoordinators) return;
+    let active = true;
+    let timer: ReturnType<typeof setTimeout>;
+    setProjectActivity(undefined);
+    async function pollDirectory() {
+      try {
+        const combined: TeamExecution = {busy: false, active_tasks: 0, queued_tasks: 0, tasks: [], busy_agents: []};
+        for (const id of directoryCoordinators.split(",")) {
+          if (!active) return;
+          const status = await api<TeamExecution>(`/agents/${id}/execution`);
+          combined.busy ||= status.busy;
+          combined.active_tasks += status.active_tasks;
+          combined.queued_tasks += status.queued_tasks;
+          combined.tasks!.push(...(status.tasks || []));
+          if (status.busy) combined.busy_agents!.push(id);
+        }
+        if (active) setProjectActivity(combined);
+      } catch { if (active) setProjectActivity(undefined); }
+      if (active) timer = setTimeout(pollDirectory, 6000);
+    }
+    void pollDirectory();
+    return () => { active = false; clearTimeout(timer); };
+  }, [directoryCoordinators, page, projectId, agentId]);
+  const toggleProject = useCallback((projectIdToToggle: string, expanded: boolean) => {
+    setExpandedProjects((current) => ({
+      ...current,
+      [projectIdToToggle]: !expanded,
+    }));
+  }, []);
   useEffect(() => {
     if (projectId && !projects.some((p) => p.id === projectId)) {
       setProjectId("");
@@ -467,6 +504,7 @@ function App() {
               className={page === n ? "active" : ""}
               onClick={() => {
                 setPage(n);
+                setAgentId("");
                 if (n !== "Agentes") {
                   setAgentId("");
                   if (n !== "Herramientas") setProjectId("");
@@ -491,33 +529,42 @@ function App() {
             </button>
           </div>
           {projects.length > 0 ? (
-            projects.map((p) => (
-              <div key={p.id}>
-                <button
-                  className={"project-nav " + (projectId === p.id ? "current" : "")}
-                  onClick={() => openProject(p)}
-                >
-                  <Folder size={15} />
-                  <span>{p.name}</span>
-                </button>
-                {projectId === p.id
-                  ? state?.agents
-                      .filter((a) => a.project_id === p.id)
-                      .map((a) => (
-                        <button
-                          className={"agent-nav " + (a.id === agentId ? "current" : "")}
-                          key={a.id}
-                          onClick={() => openAgent(a)}
-                        >
-                          <span>
-                            {a.kind === "hapic" ? "H" : a.name[0].toUpperCase()}
-                          </span>
-                          {a.name}
-                        </button>
-                      ))
-                  : null}
-              </div>
-            ))
+            projects.map((p) => {
+              const projectAgents = state?.agents.filter((a) => a.project_id === p.id) || [];
+              const isExpanded = expandedProjects[p.id] ?? projectId === p.id;
+              return (
+                <div key={p.id} className="project-group">
+                  <div className="project-nav-row">
+                    <button className="project-disclosure icon-button" aria-label={(isExpanded ? "Contraer " : "Expandir ") + p.name} aria-expanded={isExpanded} onClick={() => toggleProject(p.id, isExpanded)}>
+                      {isExpanded ? <ChevronDown size={13} /> : <ChevronRight size={13} />}
+                    </button>
+                    <button className={"project-nav " + (projectId === p.id ? "current" : "")} onClick={() => openProject(p)}>
+                      <Folder size={15} /><span>{p.name}</span><small>{projectAgents.length}</small>
+                    </button>
+                  </div>
+                  {isExpanded ? (
+                    <div className="agent-submenu">
+                      {projectAgents.length ? (
+                        projectAgents.map((a) => (
+                          <button
+                            className={"agent-nav " + (a.id === agentId ? "current" : "")}
+                            key={a.id}
+                            onClick={() => openAgent(a)}
+                          >
+                            <span>
+                              {a.kind === "hapic" ? "H" : a.name[0].toUpperCase()}
+                            </span>
+                            {a.name}
+                          </button>
+                        ))
+                      ) : (
+                        <div className="agent-empty">Sin agentes</div>
+                      )}
+                    </div>
+                  ) : null}
+                </div>
+              );
+            })
           ) : (
             <p className="tiny muted">Tus proyectos aparecerán aquí.</p>
           )}
@@ -893,6 +940,7 @@ function App() {
             {page === "Agentes" ? (
               agent ? (
                 <>
+                  <button className="text-button team-back" onClick={() => setAgentId("")}><ChevronRight size={14} /> Volver al equipo</button>
                   <div className="tabs">
                     {(["Conversación", "Archivos", "Actividad"] as const).map(
                       (t) => (
@@ -1055,11 +1103,26 @@ function App() {
                   )}
                 </>
               ) : (
-                <AgentTable
-                  agents={agents}
-                  projects={projects}
-                  open={openAgent}
-                />
+                <>
+                  <section className="team-hero" aria-labelledby="team-title">
+                    <div><span className="eyebrow">PERSONAS + AGENTES</span><h2 id="team-title">Una idea. Todo tu equipo.</h2><p>Hapic coordina. Cada especialista aporta lo suyo. Aquí ves quién está en tu proyecto y en qué está trabajando.</p></div>
+                    <button className="primary" onClick={() => coordinator ? openAgent(coordinator) : agents.find(a => a.kind === "hapic") ? openAgent(agents.find(a => a.kind === "hapic")!) : newModal(org ? "project" : "org")}><Sparkles size={16} /> {agents.length ? "Hablar con Hapic" : "Crear mi equipo"}<ArrowUpRight size={16} /></button>
+                  </section>
+                  <div className="team-metrics">
+                    <div><Sparkles size={18} /><strong>{agents.length}</strong><span>Agentes en tu equipo</span></div>
+                    <div><Clock3 size={18} /><strong>{projectActivity ? projectActivity.active_tasks + (projectActivity.busy_agents?.length ?? (projectActivity.busy ? 1 : 0)) : "—"}</strong><span>{project ? "Ejecuciones en este proyecto" : "Ejecuciones en tus proyectos"}</span></div>
+                    <div><Layers size={18} /><strong>{projectActivity?.queued_tasks ?? "—"}</strong><span>Tareas en espera</span></div>
+                  </div>
+                  <div className="team-workspace">
+                    <div className="team-directory">
+                      <div className="section-heading"><div><h2>Tu equipo <span className="count">{agents.length}</span></h2><p className="muted tiny">Roles, tareas y acceso a cada conversación.</p></div>
+                        <select className="team-project-filter" aria-label="Filtrar equipo por proyecto" value={projectId} onChange={e => setProjectId(e.target.value)}><option value="">Todos los proyectos</option>{projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}</select>
+                      </div>
+                      <AgentTable agents={agents} projects={projects} open={openAgent} execution={projectActivity} />
+                    </div>
+                    <TeamDemo onStart={() => { const hapic = coordinator || agents.find(a => a.kind === "hapic"); if (hapic) openAgent(hapic); else newModal(org ? "project" : "org"); }} hasTeam={agents.length > 0} />
+                  </div>
+                </>
               )
             ) : null}
             {page === "Plantillas" && templates.length ? (
@@ -1445,12 +1508,18 @@ function AgentTable({
   agents,
   projects,
   open,
+  execution,
 }: {
   agents: Agent[];
   projects: Project[];
   open: (a: Agent) => void;
+  execution?: TeamExecution;
 }) {
+  const [query, setQuery] = useState("");
+  const filtered = agents.filter(a => `${a.name} ${agentRoles[a.kind]} ${projects.find(p => p.id === a.project_id)?.name || ""}`.toLocaleLowerCase("es").includes(query.toLocaleLowerCase("es")));
   return agents.length ? (
+    <section className="agents-table" aria-label="Directorio de agentes">
+    <div className="team-table-toolbar"><label className="team-search"><Search size={16} /><input aria-label="Buscar agente, rol o proyecto" placeholder="Buscar por nombre o rol…" value={query} onChange={e => setQuery(e.target.value)} /></label><span className="tiny muted">{filtered.length} de {agents.length}</span></div>
     <div className="card table-scroll">
       <table>
         <thead>
@@ -1458,14 +1527,17 @@ function AgentTable({
             <th>Agente</th>
             <th>Proyecto</th>
             <th>Modelo</th>
-            <th>Estado registrado</th>
+            <th>Trabajo y estado</th>
             <th>
               <span className="sr-only">Abrir</span>
             </th>
           </tr>
         </thead>
         <tbody>
-          {agents.map((a) => (
+          {filtered.map((a) => {
+            const tasks = execution?.tasks?.filter(task => task.agent_id === a.id) || [];
+            const task = tasks.find(task => task.executing) || tasks.find(task => task.state === "queued") || tasks[tasks.length - 1];
+            return (
             <tr key={a.id} onClick={() => open(a)}>
               <td>
                 <button
@@ -1483,25 +1555,29 @@ function AgentTable({
                     <small>
                       {agentRoles[a.kind]}
                     </small>
+                    <small className="table-model-summary">{a.model} · {a.effort}</small>
                   </span>
                 </button>
               </td>
-              <td>{projects.find((p) => p.id === a.project_id)?.name}</td>
-              <td>
+              <td data-label="Proyecto">{projects.find((p) => p.id === a.project_id)?.name}</td>
+              <td data-label="Modelo">
                 <code>{a.model}</code>
                 <small>{a.effort}</small>
               </td>
               <td>
+                {task ? <div className="table-task"><span className={"team-task-status " + (task.executing ? "active" : task.state)}>{task.executing ? "En curso" : ({ queued: "En cola", delivered: "Entregada", completed: "Entregada", failed: "Fallida", blocked: "Bloqueada", running: "Sin ejecución confirmada" }[task.state] || task.state)}</span><span title={task.objective}>{task.objective}</span>{task.latest_activity && <small title={task.latest_activity}>{task.latest_activity}</small>}</div> : <div className="table-task">{a.kind === "hapic" && execution?.busy_agents?.includes(a.id) ? <span className="team-task-status active">Coordinando el equipo</span> : <span className="muted tiny">{execution ? "Sin tarea asignada" : "Abre el agente para ver su actividad"}</span>}</div>}
                 <Badge status={a.status} />
               </td>
               <td>
-                <ChevronRight size={15} />
+                <button className="icon-button" aria-label={"Abrir conversación de " + a.name} onClick={e => { e.stopPropagation(); open(a); }}><ArrowUpRight size={16} /></button>
               </td>
             </tr>
-          ))}
+          );})}
         </tbody>
       </table>
+      {!filtered.length && <p className="team-no-results">No hay coincidencias. Prueba con otro nombre o rol.</p>}
     </div>
+    </section>
   ) : (
     <Empty icon={<Sparkles size={27} />} title="Tu equipo empieza con Hapic">
       Crea un proyecto para preparar tu orquestador y sumar especialistas.

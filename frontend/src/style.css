@@ -312,12 +312,34 @@ svg {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.current {
-  color: #111;
-  background: #f6f6f6;
+.project-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 14px;
+  height: 14px;
+  color: #8a8a8a;
+  flex-shrink: 0;
+}
+.agent-submenu {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-left: 16px;
+  padding-left: 8px;
+  border-left: 1px solid #ececec;
+}
+.agent-empty {
+  padding: 8px 8px 8px 10px;
+  font-size: 10px;
+  color: #8b8b8b;
+}
+.project-nav:hover,
+.agent-nav:hover {
+  background: #f5f5f5;
 }
 .agent-nav {
-  padding: 7px 8px 7px 28px;
+  padding: 7px 8px 7px 10px;
 }
 .agent-nav > span {
   width: 18px;
@@ -329,6 +351,11 @@ svg {
   font-size: 9px;
   font-weight: 600;
   background: #fff;
+  flex-shrink: 0;
+}
+.current {
+  color: #111;
+  background: #f6f6f6;
 }
 .sidebar-footer {
   margin-top: auto;
@@ -2292,3 +2319,496 @@ textarea::placeholder {
 .readable-copy > div { margin-bottom: 14px; }
 .readable-copy dt { font-weight: 650; margin-bottom: 4px; }
 .readable-copy dd { margin: 0; white-space: pre-wrap; }
+.action-demo-block {
+  margin-bottom: 24px;
+}
+.demo-chat-card {
+  padding: 18px;
+  background: linear-gradient(180deg, #ffffff 0%, #fafafa 100%);
+  border: 1px solid #e9e9e9;
+  border-radius: 16px;
+  box-shadow: 0 10px 28px rgba(17, 17, 17, 0.04);
+}
+.demo-chat-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+.demo-chat-title {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.demo-chat-title strong {
+  display: block;
+  font-size: 13px;
+}
+.demo-chat-messages {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 12px;
+  border: 1px solid #ececec;
+  border-radius: 12px;
+  background: #f9f9f9;
+  margin-bottom: 16px;
+}
+.demo-message {
+  display: flex;
+}
+.demo-message.agent {
+  justify-content: flex-start;
+}
+.demo-message.user {
+  justify-content: flex-end;
+}
+.demo-bubble {
+  max-width: min(78%, 460px);
+  border-radius: 14px;
+  padding: 10px 12px;
+  border: 1px solid #e6e6e6;
+  background: #fff;
+}
+.demo-message.user .demo-bubble {
+  background: #111827;
+  border-color: #111827;
+  color: #fff;
+}
+.demo-label {
+  display: inline-block;
+  font-size: 9px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  opacity: 0.8;
+  margin-bottom: 6px;
+}
+.demo-bubble p {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.55;
+}
+.demo-chat-composer {
+  border: 1px solid #e5e5e5;
+  background: #fff;
+  border-radius: 12px;
+  padding: 10px;
+}
+.demo-chat-composer textarea {
+  width: 100%;
+  resize: none;
+  border: 0;
+  background: transparent;
+  color: #272727;
+  min-height: 52px;
+  padding: 8px 10px;
+  font-size: 12px;
+  line-height: 1.5;
+}
+.demo-chat-actions {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 8px;
+  margin-top: 8px;
+}
+.demo-chat-actions .primary,
+.demo-chat-actions .secondary {
+  min-height: 34px;
+}
+
+/* Team directory and clearly identified interactive example. */
+.project-nav-row{
+  display:flex;
+  align-items:center;
+  gap:2px}
+  .project-nav-row .project-nav{
+    min-width:0;
+    flex:1;
+    padding-left:8px}
+    .project-nav-row .project-nav span{
+      overflow:hidden;
+      text-overflow:ellipsis}
+      .project-nav-row .project-nav small{
+        margin-left:auto;
+        color:#888;
+        font-size:10px}
+        .project-disclosure{
+          flex-shrink:0;
+          width:24px;
+          height:28px}
+          .team-back{
+            margin-bottom:14px}
+            .team-back>svg{
+              transform:rotate(180deg)}
+              .team-hero{
+                padding:30px 32px;
+                border-radius:18px;
+                background:radial-gradient(ellipse at top right,#454164 0,transparent 60%),#1c1b24;
+                color:white;
+                display:flex;
+                align-items:center;
+                justify-content:space-between;
+                gap:28px;
+                margin-bottom:20px}
+                .team-hero .eyebrow{
+                  color:#c3b9f0;
+                  font-size:10px;
+                  letter-spacing:.15em}
+                  .team-hero h2{
+                    font-size:30px;
+                    letter-spacing:-1px;
+                    margin:10px 0}
+                    .team-hero p{
+                      color:#d1cfdd;
+                      max-width:590px;
+                      line-height:1.7;
+                      font-size:13px}
+                      .team-hero .primary{
+                        background:#fff;
+                        color:#24212e;
+                        flex-shrink:0}
+                        .team-metrics{
+                          display:grid;
+                          grid-template-columns:repeat(3,minmax(0,1fr));
+                          gap:14px;
+                          margin-bottom:28px}
+                          .team-metrics>div{
+                            background:#fff;
+                            border:1px solid #e9e7ee;
+                            border-radius:12px;
+                            padding:18px 20px;
+                            display:grid;
+                            grid-template-columns:24px 1fr;
+                            gap:8px 12px}
+                            .team-metrics svg{
+                              color:#817198;
+                              margin-top:5px}
+                              .team-metrics strong{
+                                font-size:27px;
+                                line-height:1.2;
+                                letter-spacing:-1px}
+                                .team-metrics span{
+                                  grid-column:2;
+                                  color:#77717f;
+                                  font-size:11px}
+                                  .team-workspace{
+                                    display:grid;
+                                    grid-template-columns:minmax(0,1fr) 330px;
+                                    gap:24px;
+                                    align-items:start}
+                                    .team-directory{
+                                      min-width:0}
+                                      .team-directory .section-heading{
+                                        gap:12px;
+                                        align-items:center;
+                                        margin-top:0}
+                                        .team-directory .section-heading p{
+                                          margin-top:6px}
+                                          .team-project-filter{
+                                            max-width:190px;
+                                            background:white;
+                                            border:1px solid #e5e3ea;
+                                            border-radius:8px;
+                                            padding:9px;
+                                            font-size:12px}
+                                            .team-table-toolbar{
+                                              display:flex;
+                                              justify-content:space-between;
+                                              align-items:center;
+                                              gap:12px;
+                                              margin:16px 0 12px}
+                                              .team-search{
+                                                display:flex;
+                                                align-items:center;
+                                                gap:9px;
+                                                border:1px solid #e4e2e9;
+                                                border-radius:9px;
+                                                padding:0 12px;
+                                                background:white;
+                                                max-width:330px;
+                                                flex:1;
+                                                color:#8a8295}
+                                                .team-search input{
+                                                  border:0;
+                                                  outline:none;
+                                                  background:transparent;
+                                                  width:100%;
+                                                  padding:11px 0;
+                                                  font-size:12px;
+                                                  min-width:0}
+                                                  .agents-table .table-scroll{
+                                                    border-radius:12px}
+                                                    .agents-table table{
+                                                      min-width:720px}
+                                                      .agents-table th{
+                                                        font-size:10px;
+                                                        text-transform:uppercase;
+                                                        letter-spacing:.07em;
+                                                        background:#f5f4f7;
+                                                        color:#77717f}
+                                                        .agents-table td{
+                                                          vertical-align:top;
+                                                          padding-top:17px;
+                                                          padding-bottom:17px}
+                                                          .table-task{
+                                                            display:flex;
+                                                            flex-direction:column;
+                                                            gap:6px;
+                                                            font-size:11px;
+                                                            max-width:230px;
+                                                            margin-bottom:8px}
+                                                            .table-task>span:not(.team-task-status),.table-task small{
+                                                              display:-webkit-box;
+                                                              -webkit-line-clamp:2;
+                                                              -webkit-box-orient:vertical;
+                                                              overflow:hidden;
+                                                              overflow-wrap:anywhere;
+                                                              line-height:1.6}
+                                                              .team-task-status{
+                                                                font-size:10px;
+                                                                font-weight:600;
+                                                                align-self:flex-start;
+                                                                border-radius:5px;
+                                                                padding:3px 7px;
+                                                                background:#f0eef4;
+                                                                color:#64596f}
+                                                                .team-task-status.active{
+                                                                  background:#eef3ff;
+                                                                  color:#4268b0}
+                                                                  .team-task-status.delivered,.team-task-status.completed{
+                                                                    background:#eaf6ee;
+                                                                    color:#3a7952}
+                                                                    .team-task-status.failed,.team-task-status.blocked{
+                                                                      background:#fff0ee;
+                                                                      color:#ae554a}
+                                                                      .team-no-results{
+                                                                        text-align:center;
+                                                                        padding:32px;
+                                                                        font-size:13px;
+                                                                        color:#777}
+                                                                        .team-demo{
+                                                                          padding:20px;
+                                                                          border-color:#e4dfee;
+                                                                          background:linear-gradient(160deg,#fff,#f7f5fb);
+                                                                          position:sticky;
+                                                                          top:20px}
+                                                                          .team-demo-label{
+                                                                            font-size:9px;
+                                                                            letter-spacing:.1em;
+                                                                            font-weight:700;
+                                                                            background:#ede8f6;
+                                                                            color:#76628f;
+                                                                            padding:5px 7px;
+                                                                            border-radius:5px}
+                                                                            .team-demo-intro{
+                                                                              font-size:12px;
+                                                                              line-height:1.7;
+                                                                              color:#81798a;
+                                                                              margin-bottom:18px}
+                                                                              .demo-steps{
+                                                                                display:flex;
+                                                                                gap:6px;
+                                                                                margin-bottom:18px}
+                                                                                .demo-steps button{
+                                                                                  flex:1;
+                                                                                  padding:8px 3px;
+                                                                                  border:0;
+                                                                                  border-radius:7px;
+                                                                                  background:transparent;
+                                                                                  color:#857b90;
+                                                                                  font-size:10px;
+                                                                                  display:flex;
+                                                                                  flex-direction:column;
+                                                                                  align-items:center;
+                                                                                  gap:7px}
+                                                                                  .demo-steps button>span{
+                                                                                    height:22px;
+                                                                                    width:22px;
+                                                                                    display:grid;
+                                                                                    place-items:center;
+                                                                                    border-radius:50%;
+                                                                                    background:#ebe7f1;
+                                                                                    font-size:10px}
+                                                                                    .demo-steps button.selected{
+                                                                                      background:#eeebf5;
+                                                                                      color:#554268;
+                                                                                      font-weight:600}
+                                                                                      .demo-steps button.selected>span{
+                                                                                        background:#68537c;
+                                                                                        color:white}
+                                                                                        .team-demo .demo-chat-messages{
+                                                                                          min-height:155px;
+                                                                                          background:#f1eef6;
+                                                                                          border-color:#e6e0ed;
+                                                                                          padding:12px}
+                                                                                          .team-demo .demo-bubble{
+                                                                                            max-width:100%;
+                                                                                            box-shadow:0 3px 9px #35263c07}
+                                                                                            .team-demo .demo-message.user .demo-bubble{
+                                                                                              background:#35303e;
+                                                                                              border-color:#35303e}
+                                                                                              .demo-step-detail{
+                                                                                                display:flex;
+                                                                                                gap:9px;
+                                                                                                align-items:flex-start;
+                                                                                                font-size:11px;
+                                                                                                line-height:1.7;
+                                                                                                color:#80758b;
+                                                                                                min-height:65px}
+                                                                                                .demo-step-detail svg{
+                                                                                                  flex-shrink:0;
+                                                                                                  margin-top:3px}
+                                                                                                  .demo-start{
+                                                                                                    margin-top:20px;
+                                                                                                    padding-top:20px;
+                                                                                                    border-top:1px solid #e6e0ed;
+                                                                                                    display:grid;
+                                                                                                    gap:10px}
+                                                                                                    .demo-start>svg{
+                                                                                                      color:#8c75a2}
+                                                                                                      .demo-start strong{
+                                                                                                        font-size:13px}
+                                                                                                        .demo-start p{
+                                                                                                          font-size:11px;
+                                                                                                          line-height:1.6;
+                                                                                                          color:#80758b}
+                                                                                                          .demo-start .primary{
+                                                                                                            justify-content:space-between;
+                                                                                                            width:100%;
+                                                                                                            margin-top:3px;
+                                                                                                            background:#38303f;
+                                                                                                            border-color:#38303f;
+                                                                                                            color:white}
+                                                                                                            @media(min-width:1600px){
+                                                                                                              .team-workspace{
+                                                                                                                grid-template-columns:minmax(0,1fr) 360px;
+                                                                                                                gap:28px}
+                                                                                                              }
+                                                                                                              @media(max-width:1200px){
+                                                                                                                .team-workspace{
+                                                                                                                  grid-template-columns:minmax(0,1fr)}
+                                                                                                                  .team-demo{
+                                                                                                                    position:static}
+                                                                                                                    .team-demo .demo-chat-messages{
+                                                                                                                      min-height:0}
+                                                                                                                      .demo-step-detail{
+                                                                                                                        min-height:0}
+                                                                                                                        .demo-start{
+                                                                                                                          grid-template-columns:20px 1fr;
+                                                                                                                          align-items:center}
+                                                                                                                          .demo-start p,.demo-start .primary{
+                                                                                                                            grid-column:2}
+                                                                                                                            .team-hero{
+                                                                                                                              align-items:flex-start}
+                                                                                                                              .team-hero .primary{
+                                                                                                                                align-self:center}
+                                                                                                                              }
+                                                                                                                              @media(max-width:700px){
+                                                                                                                                .team-hero{
+                                                                                                                                  padding:24px;
+                                                                                                                                  flex-direction:column;
+                                                                                                                                  align-items:stretch;
+                                                                                                                                  gap:20px}
+                                                                                                                                  .team-hero h2{
+                                                                                                                                    font-size:25px}
+                                                                                                                                    .team-hero .primary{
+                                                                                                                                      align-self:flex-start}
+                                                                                                                                      .team-metrics{
+                                                                                                                                        gap:8px}
+                                                                                                                                        .team-metrics>div{
+                                                                                                                                          padding:14px 10px;
+                                                                                                                                          grid-template-columns:1fr;
+                                                                                                                                          gap:8px}
+                                                                                                                                          .team-metrics svg{
+                                                                                                                                            display:none}
+                                                                                                                                            .team-metrics span{
+                                                                                                                                              grid-column:1;
+                                                                                                                                              font-size:10px;
+                                                                                                                                              line-height:1.5}
+                                                                                                                                              .team-metrics strong{
+                                                                                                                                                font-size:24px}
+                                                                                                                                                .team-directory .section-heading{
+                                                                                                                                                  flex-wrap:wrap}
+                                                                                                                                                  .team-project-filter{
+                                                                                                                                                    max-width:100%;
+                                                                                                                                                    width:100%}
+                                                                                                                                                    .team-table-toolbar>span{
+                                                                                                                                                      white-space:nowrap}
+                                                                                                                                                    }
+                                                                                                                                                    .agents-table table{
+                                                                                                                                                      min-width:0;
+                                                                                                                                                      table-layout:fixed;
+                                                                                                                                                      white-space:normal}
+                                                                                                                                                      .agents-table th:first-child{
+                                                                                                                                                        width:24%}
+                                                                                                                                                        .agents-table th:nth-child(2){
+                                                                                                                                                          width:14%}
+                                                                                                                                                          .agents-table th:nth-child(3){
+                                                                                                                                                            width:19%}
+                                                                                                                                                            .agents-table th:last-child{
+                                                                                                                                                              width:42px}
+                                                                                                                                                              .agents-table td{
+                                                                                                                                                                overflow-wrap:anywhere;
+                                                                                                                                                                padding-inline:13px}
+                                                                                                                                                                .agents-table .table-agent{
+                                                                                                                                                                  min-width:0;
+                                                                                                                                                                  align-items:flex-start}
+                                                                                                                                                                  .agents-table .agent-letter{
+                                                                                                                                                                    flex-shrink:0}
+                                                                                                                                                                    .agents-table .table-agent>span:last-child{
+                                                                                                                                                                      min-width:0}
+                                                                                                                                                                      .agents-table td code{
+                                                                                                                                                                        font-size:10px}
+                                                                                                                                                                        .table-task{
+                                                                                                                                                                          white-space:normal}
+                                                                                                                                                                          .table-model-summary{
+                                                                                                                                                                            display:none}
+                                                                                                                                                                            @media(min-width:701px) and (max-width:1450px){
+                                                                                                                                                                              .agents-table th:nth-child(3),.agents-table td:nth-child(3){
+                                                                                                                                                                                display:none}
+                                                                                                                                                                                .agents-table .table-model-summary{
+                                                                                                                                                                                  display:block;
+                                                                                                                                                                                  font-size:9px;
+                                                                                                                                                                                  color:#9b94a4}
+                                                                                                                                                                                  .agents-table th:first-child{
+                                                                                                                                                                                    width:32%}
+                                                                                                                                                                                    .agents-table th:nth-child(2){
+                                                                                                                                                                                      width:17%}
+                                                                                                                                                                                      .agents-table th:last-child{
+                                                                                                                                                                                        width:38px}
+                                                                                                                                                                                      }
+                                                                                                                                                                                      @media(max-width:700px){
+                                                                                                                                                                                        .agents-table table,.agents-table tbody,.agents-table tr,.agents-table td{
+                                                                                                                                                                                          display:block}
+                                                                                                                                                                                          .agents-table thead{
+                                                                                                                                                                                            display:none}
+                                                                                                                                                                                            .agents-table tbody tr{
+                                                                                                                                                                                              position:relative;
+                                                                                                                                                                                              padding:16px;
+                                                                                                                                                                                              border-bottom:1px solid #e8e5ed}
+                                                                                                                                                                                              .agents-table td{
+                                                                                                                                                                                                padding:5px 0;
+                                                                                                                                                                                                border:0}
+                                                                                                                                                                                                .agents-table td:first-child{
+                                                                                                                                                                                                  padding:0 36px 10px 0}
+                                                                                                                                                                                                  .agents-table td[data-label]::before{
+                                                                                                                                                                                                    content:attr(data-label) " · ";
+                                                                                                                                                                                                    font-size:10px;
+                                                                                                                                                                                                    color:#aaa}
+                                                                                                                                                                                                    .agents-table td[data-label] code{
+                                                                                                                                                                                                      font-size:10px}
+                                                                                                                                                                                                      .agents-table td[data-label] small{
+                                                                                                                                                                                                        display:inline;
+                                                                                                                                                                                                        margin-left:5px}
+                                                                                                                                                                                                        .agents-table td:last-child{
+                                                                                                                                                                                                          position:absolute;
+                                                                                                                                                                                                          right:14px;
+                                                                                                                                                                                                          top:13px}
+                                                                                                                                                                                                          .agents-table .table-task{
+                                                                                                                                                                                                            max-width:none;
+                                                                                                                                                                                                            margin-top:5px}
+                                                                                                                                                                                                            .agents-table .table-agent strong{
+                                                                                                                                                                                                              font-size:14px}
+                                                                                                                                                                                                            }
