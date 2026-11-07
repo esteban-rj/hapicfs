@@ -17,9 +17,9 @@ if (-not (Test-Path -LiteralPath 'frontend/dist/index.html')) {
     if (-not $taskPnpm) { throw 'Compila la interfaz con pnpm install y pnpm build en frontend. Se requiere Node 24 y pnpm 11.' }
     Push-Location frontend
     try {
-        pnpm install --frozen-lockfile
+        pnpm --ignore-workspace install --frozen-lockfile
         if ($LASTEXITCODE -ne 0) { throw 'No se pudieron instalar las dependencias de la interfaz.' }
-        pnpm build
+        pnpm --ignore-workspace build
         if ($LASTEXITCODE -ne 0) { throw 'No se pudo compilar la interfaz.' }
     } finally { Pop-Location }
 }

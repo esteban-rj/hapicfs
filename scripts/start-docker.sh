@@ -13,6 +13,7 @@ if ! docker info >/dev/null 2>&1; then
     exit 1
 fi
 export HAPIC_HOST_DATA_DIR=${HAPIC_HOST_DATA_DIR:-$task_root/.hapic}
+docker build -t hapic-runner:local -f runner/Dockerfile runner
 mkdir -p "$HAPIC_HOST_DATA_DIR"
 if [ -n "$task_youtube_file" ]; then
     case "$task_youtube_file" in

@@ -1,0 +1,14 @@
+services:
+  game:
+    build: .
+    ports:
+      - "127.0.0.1:${RBR_PORT:-3000}:3000"
+    environment:
+      RBR_PUBLIC_URL: "${RBR_PUBLIC_URL:-}"
+    restart: unless-stopped
+    mem_limit: 256m
+    cpus: 0.5
+    pids_limit: 64
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]

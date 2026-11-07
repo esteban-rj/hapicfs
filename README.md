@@ -7,9 +7,11 @@ Los cinco bocetos previos están conservados en [docs/mockups](docs/mockups). La
 ## Documentación
 
 - [Arquitectura](docs/architecture.md): componentes, datos, provisión y límites de acceso.
+- [Auditoría multiagente y delegación](docs/multiagent-audit.md): diagnóstico, tareas persistentes, evidencias, pruebas y límites pendientes.
 - [API y MCP](docs/api.md): rutas, sesión local, herramientas y errores.
 - [Operación](docs/operations.md): arranque, credenciales, persistencia, copias y diagnóstico.
 - [YouTube](docs/youtube.md): conexión OAuth, consultas reales y asignación a cualquier agente.
+- [HeyGen](docs/heygen.md): API key por proyecto, generación de clips con audio y MP4 persistentes.
 - [Community Manager e integración social](docs/community-manager.md): perfil disponible y evolución de otras funciones sociales.
 - [Changelog](CHANGELOG.md): versiones y cambios pendientes de publicación.
 
@@ -33,6 +35,8 @@ Durante desarrollo: inicia el backend en 8000 y ejecuta `pnpm dev` dentro de `fr
 
 ## Recorrido
 
+El chat consulta el estado de ejecución del servidor cada tres segundos: recupera el indicador al recargar o volver a la conversación y actualiza el historial al terminar. Hapic muestra las tareas del equipo con responsable, objetivo y estado; los especialistas muestran sus propias tareas. Un aviso general permite volver a Hapic mientras el equipo trabaja desde otra sección. Se bloquea el envío cuando el servidor confirma un turno activo. Los turnos se registran en SQLite y los que estaban activos al reiniciar el servidor se señalan como interrumpidos. Una tarea `running` sin ejecución comprobada se muestra como pendiente de revisión, sin afirmar que siga trabajando ni reintentarse automáticamente.
+
 1. Crea una organización y un proyecto desde la plataforma. Se guardan registros, pertenencia del operador local y carpetas reales. El proyecto recibe un perfil Hapic nuevo.
 2. En Configuración, define la API key de OpenAI mediante el formulario dedicado. También puedes definir `OPENAI_API_KEY` en el entorno del servidor o en un archivo `.env` ignorado por Git. Nunca la pegues en el chat.
 3. Inicia Docker Desktop. Abre Hapic y pulsa **Iniciar runtime**. Si ya hay key al crear un proyecto, se solicita su arranque automáticamente.
@@ -43,6 +47,14 @@ Sin Docker o sin key, el chat de IA está deshabilitado. **Preparar** o **Usar p
 
 ## Especialistas, planes e imágenes
 
+**Entorno de desarrollo** aparece en **Herramientas → Herramientas por agente**. Se habilita por defecto para coders nuevos y existentes (se conservan las desactivaciones explícitas) y puede asignarse a cualquier agente. Después de cambiar una asignación, reinicia el runtime para actualizar su lista MCP. Los scripts `start-docker.ps1` y `start-docker.sh` construyen `hapic-runner:local`; con Compose directo o servidor nativo, ejecuta antes `docker build -t hapic-runner:local -f runner/Dockerfile runner`.
+
+`development_run` ejecuta comandos con Python 3.14, Node 24 y npm, devuelve código de salida y hasta 20000 caracteres de logs y detiene el contenedor al agotar el plazo (1–120 segundos). Cada comando usa un contenedor nuevo con solo el workspace del agente persistente, usuario sin privilegios, raíz de solo lectura, límites de CPU/memoria/procesos y sin tokens ni socket Docker. Puede acceder a la red para instalar dependencias; no constituye un aislamiento de red. Usa `.venv` dentro del workspace para paquetes Python. El coder debe leer el plan vigente antes de ejecutar o escribir.
+
+`development_preview` permite `start`, `status` y `stop`. El servidor debe escuchar en `0.0.0.0:3000`; la herramienta devuelve una URL publicada solo en `127.0.0.1` del PC. La vista previa expira tras una hora. No es alojamiento público: no permite por sí sola que jugadores entren desde otras redes. Estar `running` tampoco demuestra que la aplicación funcione; hay que comprobar la página y sus pruebas. Al desactivar Entorno de desarrollo se detiene su vista previa.
+
+En el chat de cualquier agente conectado, **Adjuntar imagen** permite seleccionar hasta tres imágenes PNG, JPEG o WebP de hasta 8 MB cada una. Revisa las miniaturas, escribe qué necesitas analizar y envía el mensaje. También puedes enviar solo la imagen para obtener una descripción. Los adjuntos se conservan en el historial y en el workspace del agente; al enviar se transmite su contenido al modelo a través de Hermes. La interpretación requiere un modelo con visión y puede tener coste de inferencia. No identifica con certeza fuentes tipográficas exactas ni detalles ilegibles. Los vídeos y documentos no se admiten como adjuntos.
+
 | Plantilla | Trabajo |
 | --- | --- |
 | UX | Brief, flujos, wireframes, accesibilidad e imágenes solicitadas |
@@ -50,6 +62,8 @@ Sin Docker o sin key, el chat de IA está deshabilitado. **Preparar** o **Usar p
 | Arquitecto / Planner | Arquitectura y plan compartido con tareas, archivos, contratos y validación |
 | Coder | Implementación en archivos siguiendo el plan del arquitecto vinculado |
 | Community Manager | Estrategia, calendario, copys, guiones, propuestas de respuesta y análisis de métricas aportadas |
+
+**HeyGen** está disponible en **Herramientas**: conecta la API key del proyecto y asigna la cuenta a tus agentes. Community Manager la incluye preseleccionada. Genera clips con audio de 5 a 15 segundos desde texto o una imagen pública; el MP4 queda guardado y adjunto al chat, con reproducción y descarga en Archivos. Por defecto usa 5 s, 480p y formato vertical (estimación US$0,05). Los trabajos y reintentos se identifican para evitar duplicar generaciones; consulta la [guía de HeyGen](docs/heygen.md). Si el runtime ya estaba iniciado, reinícialo para cargar las nuevas herramientas.
 
 El Community Manager prepara borradores para Instagram y YouTube con memoria y archivos propios. Incluye **YouTube de solo lectura**: conecta un canal desde **Herramientas**, consulta vídeos, comentarios y métricas y asigna el canal a los agentes que elijas. Cualquier tipo de agente puede integrarla. El administrador configura el JSON OAuth en el servidor, por ejemplo como secreto de Docker con `./scripts/start-docker.sh "/ruta/privada/google-oauth.json"`; cada cliente solo autoriza su canal desde Google. La [guía de YouTube](docs/youtube.md) detalla configuración, permisos y alcance. Instagram, publicación, programación y respuestas siguen pendientes.
 

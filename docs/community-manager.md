@@ -1,6 +1,6 @@
 # Community Manager e integración social
 
-Fecha de revisión: 2026-11-06. La plantilla y [YouTube de solo lectura](youtube.md) están implementados. Instagram, publicación, respuestas y programación son propuestas pendientes.
+Fecha de revisión: 2026-11-07. La plantilla, [YouTube de solo lectura](youtube.md) y [generación de clips con HeyGen](heygen.md) están implementados. Instagram, publicación, respuestas y programación son propuestas pendientes.
 
 ## Perfil disponible
 
@@ -17,7 +17,7 @@ Su objetivo es mantener la voz de marca, planear contenido para Instagram y YouT
 | Clasificación de comentarios y propuestas de respuesta | `respuestas-comunidad.md` |
 | Fuente, periodo, definición de métricas, resultados e hipótesis | `reporte-metricas.md` |
 
-Puede listar, leer y escribir archivos propios. Incluye YouTube de solo lectura: al conectar un canal en Herramientas y asignárselo, consulta vídeos, comentarios e informes reales. Cualquier agente puede recibir esta integración. Instagram sigue trabajando con datos aportados por el usuario. No tiene navegador, publicación, programación, respuestas o generación de vídeo. Los briefs visuales y las fechas del CSV siguen siendo propuestas.
+Puede listar, leer y escribir archivos propios. Incluye YouTube de solo lectura: al conectar un canal en Herramientas y asignárselo, consulta vídeos, comentarios e informes reales. También incluye HeyGen para generar clips con audio de 5 a 15 segundos, al conectar una API key y asignarle la cuenta. Los MP4 terminados se guardan en su workspace, con vista previa en el chat y Archivos. Cualquier agente puede recibir estas integraciones. Instagram sigue trabajando con datos aportados por el usuario. No tiene navegador, publicación, programación ni respuestas. Los briefs y las fechas del CSV siguen siendo propuestas; solo un resultado guardado acredita un vídeo producido. Consulta [HeyGen](heygen.md) para configuración, coste estimado y recuperación de trabajos.
 
 ## Opciones de conexión
 
@@ -48,7 +48,7 @@ Los permisos usan el prefijo `https://www.googleapis.com/auth/`. Pedir autorizac
 
 Subir primero con `status.privacyStatus=private` explícito para revisar el resultado. Para programar, `status.publishAt` exige un vídeo privado que nunca se haya publicado y una fecha válida; una fecha pasada puede publicarlo inmediatamente. [Google: estado del vídeo](https://developers.google.com/youtube/data/reference/rest/v3/videos?hl=en#status.publishAt).
 
-Antes de ofrecerlo a terceros, comprobar la verificación OAuth aplicable. [Google: OAuth para servidores](https://developers.google.com/youtube/reporting/guides/authorization/server-side-web-apps). Controlar cuotas desde el proyecto y verificar procesamiento, audiencia y recursos antes de publicar. La plantilla actual no produce ni recibe archivos de vídeo: hace falta una entrada de medios aparte del chat de texto.
+Antes de ofrecerlo a terceros, comprobar la verificación OAuth aplicable. [Google: OAuth para servidores](https://developers.google.com/youtube/reporting/guides/authorization/server-side-web-apps). Controlar cuotas desde el proyecto y verificar procesamiento, audiencia y recursos antes de publicar. HeyGen produce clips MP4 en el workspace y los adjunta al chat; la subida a YouTube sigue pendiente de una implementación independiente.
 
 ## Arquitectura propuesta para Hapic
 
