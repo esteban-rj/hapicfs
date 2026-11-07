@@ -1342,20 +1342,20 @@ function App({ session, onLogout }: { session: Session; onLogout: () => Promise<
                           ? "Introduce una nueva clave para reemplazarla"
                           : "sk-…"
                       }
-                      disabled={caps?.openai.source === "environment"}
+                      disabled={busy}
                       minLength={20}
                       required
                     />
                     <p className="field-help">
                       {caps?.openai.source === "environment"
-                        ? "Administrada por la variable del servidor OPENAI_API_KEY."
+                        ? "Se usa OPENAI_API_KEY del servidor. Guarda una nueva clave aquí para reemplazarla."
                         : "No la pegues en una conversación. Usa solo este formulario local."}
                     </p>
                     <div className="button-row">
                       <button
                         className="primary"
                         disabled={
-                          busy || !key || caps?.openai.source === "environment"
+                          busy || !key
                         }
                       >
                         Guardar credencial
@@ -1372,7 +1372,7 @@ function App({ session, onLogout }: { session: Session; onLogout: () => Promise<
                               });
                               await refresh();
                               setToast(
-                                "Credencial eliminada del servidor. Los contenedores existentes conservan su entorno hasta reiniciarlos.",
+                                "Credencial guardada eliminada. Si existe OPENAI_API_KEY en el servidor, vuelve a usarse. Reinicia los agentes para aplicar el cambio.",
                               );
                             })
                           }
