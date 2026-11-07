@@ -21,6 +21,7 @@ flowchart LR
 | Componente | Responsabilidad | Código |
 | --- | --- | --- |
 | Interfaz | Onboarding, navegación, chat, archivos y ajustes | `frontend/src/` |
+| Oficina 3D | Diorama bajo demanda, puestos del proyecto y acceso a conversaciones | `frontend/src/ProjectOffice.tsx`, `officeScene.ts`, `officeModel.ts` |
 | API | Sesión local, validación, rutas HTTP y servidor MCP | `backend/app.py` |
 | Servicio | Organizaciones, proyectos, perfiles, permisos y herramientas | `backend/service.py` |
 | Almacenamiento | SQLite, rutas persistentes, cifrado y tokens | `backend/storage.py` |
@@ -31,6 +32,14 @@ flowchart LR
 | HeyGen | Claves cifradas por proyecto, trabajos idempotentes y MP4 persistentes | `backend/heygen.py` |
 
 FastAPI sirve el build de Vite en producción. En desarrollo, Vite reenvía `/api` al backend. El chat actual espera una respuesta completa del servidor; la interfaz no implementa streaming de tokens.
+
+## Oficina 3D bajo demanda
+
+El botón de cada proyecto monta `ProjectOffice` mediante `React.lazy`. Three.js y los estilos de la oficina se descargan en un módulo separado después de esa acción. La escena modela muebles y personajes localmente y deriva sus puestos de los agentes filtrados por proyecto y organización. El número de filas crece con el equipo; no se añaden agentes de muestra ni se duplica el historial.
+
+La vista reutiliza `/api/state` y la consulta periódica de `/api/agents/{hapic-id}/execution`. Las animaciones dependen de turnos activos o tareas con `executing: true`; una consulta fallida elimina la confirmación visible. Seleccionar un agente permite entrar en el chat habitual. Cerrar desmonta la escena, cancela la animación, desconecta observadores y controles y libera geometrías, materiales, texturas y contexto WebGL. La animación se pausa con la pestaña oculta y respeta la preferencia de movimiento reducido. La lista HTML del equipo permanece disponible si falla WebGL.
+
+No se añaden rutas, tablas, procesos Hermes ni llamadas a proveedores para esta vista. La implementación toma como referencia [Hermes Office 3D](https://github.com/esteban-rj/hermes-game-studio/tree/main/hermes-office-3d), con integración propia en React y en el modelo de proyectos de Hapic.
 
 ## Modelo de datos
 

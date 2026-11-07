@@ -45,6 +45,8 @@ class RuntimeUnavailable(Exception):
 class DockerRuntime:
     image = os.getenv("HERMES_IMAGE", "nousresearch/hermes-agent:stable")
     network = os.getenv("HAPIC_DOCKER_NETWORK", "hapic-net")
+    startup_timeout = int(os.getenv("HAPIC_STARTUP_TIMEOUT", "120"))
+    readiness_timeout = int(os.getenv("HAPIC_READINESS_TIMEOUT", "3"))
 
     def client(self):
         try:
@@ -85,7 +87,7 @@ class DockerRuntime:
 
     def start(self, agent, store):
         client = self.client()
-        client.api.timeout = 600  # Official image downloads can take several minutes.
+        client.api.timeout = 120  # Default startup should not block for multiple minutes during local validation.
         if not store.api_key():
             raise RuntimeUnavailable("Configura una API key de OpenAI en Configuración.")
         self.prepare(agent, store)
@@ -120,13 +122,13 @@ class DockerRuntime:
             cap_drop=["NET_RAW", "SYS_ADMIN"], security_opt=["no-new-privileges:true"],
         )
         store.execute("UPDATE agents SET container_id=? WHERE id=?", (container.id, agent["id"]))
-        # Readiness means authenticated Hermes API ready, never just Docker 'running'.
-        for _ in range(90):
+        deadline = time.monotonic() + self.startup_timeout
+        while time.monotonic() < deadline:
             container.reload()
             if container.status != "running":
                 raise RuntimeUnavailable("El contenedor Hermes se detuvo durante el arranque. Revisa sus logs localmente.")
             try:
-                response = httpx.get(self.url(container) + "/health/detailed", headers={"Authorization": "Bearer " + store.token(agent["id"], "api")}, timeout=3)
+                response = httpx.get(self.url(container) + "/health/detailed", headers={"Authorization": "Bearer " + store.token(agent["id"], "api")}, timeout=self.readiness_timeout)
                 if response.is_success and response.json().get("status") == "ok":
                     return {"container_id": container.id, "status": "running"}
             except httpx.HTTPError:
@@ -150,7 +152,7 @@ class DockerRuntime:
             status = container.status
             ready = False
             if status == "running":
-                r = httpx.get(self.url(container) + "/health/detailed", headers={"Authorization": "Bearer " + store.token(agent["id"], "api")}, timeout=3)
+                r = httpx.get(self.url(container) + "/health/detailed", headers={"Authorization": "Bearer " + store.token(agent["id"], "api")}, timeout=self.readiness_timeout)
                 ready = r.is_success and r.json().get("status") == "ok"
             return {"status": "running" if ready else ("starting" if status == "running" else "stopped"), "ready": ready, "container": container.name, "image": container.image.tags, "container_id": container.short_id}
         except (RuntimeUnavailable, docker.errors.DockerException, httpx.HTTPError, ValueError):

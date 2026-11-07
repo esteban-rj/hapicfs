@@ -45,6 +45,18 @@ El chat consulta el estado de ejecución del servidor cada tres segundos: recupe
 
 Sin Docker o sin key, el chat de IA está deshabilitado. **Preparar** o **Usar plantilla** permite crear el perfil desde un formulario; no solicita inferencia ni simula mensajes de Hermes o contenedores activos.
 
+## Oficina 3D de cada proyecto
+
+Cada tarjeta de proyecto tiene un botón **Oficina 3D**. También puedes abrirla desde **Abrir oficina 3D** dentro del proyecto o desde su menú lateral. La oficina se carga únicamente al solicitarla; navegar por proyectos o conversaciones no descarga Three.js ni inicia una escena.
+
+La vista está inspirada en [Hermes Office 3D](https://github.com/esteban-rj/hermes-game-studio/tree/main/hermes-office-3d), adaptada a los datos de Hapic: nombre del proyecto, un puesto y personaje por agente real, sala común y panel del proyecto. Los puestos crecen con el equipo y solo aparecen agentes de ese proyecto y organización. No necesita modelos, imágenes ni recursos remotos.
+
+Arrastra para girar, usa la rueda o pellizca para acercar, o utiliza los controles de cámara y vista superior. Selecciona un personaje, su puesto o una persona de la lista y pulsa **Abrir conversación** para entrar en su chat existente. **Salir de la oficina** o Escape cierra la escena y libera sus recursos gráficos. En móvil, la lista del equipo aparece debajo de la oficina. Si WebGL no está disponible, la lista y el acceso a las conversaciones siguen funcionando.
+
+La actividad usa la consulta existente al servidor: solo se anima un agente cuando su turno o tarea tiene ejecución confirmada. Un runtime registrado como `running` no se presenta por sí solo como trabajo activo. Abrir la oficina no inicia runtimes ni envía mensajes.
+
+Pruebas desde `frontend`: `pnpm test` comprueba aislamiento, distribución y estados. `pnpm test:office` construye la interfaz y prueba el flujo con FastAPI y SQLite temporales, sin credenciales de proveedores. Requiere las dependencias Python del proyecto y Chromium instalado mediante `pnpm exec playwright install chromium`; puedes indicar otro Python con `HAPIC_TEST_PYTHON` y un Chrome existente con `HAPIC_TEST_BROWSER`. Las capturas quedan en `artifacts/`.
+
 ## Especialistas, planes e imágenes
 
 **Entorno de desarrollo** aparece en **Herramientas → Herramientas por agente**. Se habilita por defecto para coders nuevos y existentes (se conservan las desactivaciones explícitas) y puede asignarse a cualquier agente. Después de cambiar una asignación, reinicia el runtime para actualizar su lista MCP. Los scripts `start-docker.ps1` y `start-docker.sh` construyen `hapic-runner:local`; con Compose directo o servidor nativo, ejecuta antes `docker build -t hapic-runner:local -f runner/Dockerfile runner`.
