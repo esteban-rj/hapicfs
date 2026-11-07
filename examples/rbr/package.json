@@ -1,0 +1,1 @@
+{"name":"rbr-local","version":"1.1.0","private":true,"type":"module","engines":{"node":">=22"},"scripts":{"start":"node server.js","test":"node --test"},"dependencies":{"qrcode":"1.5.4"},"devDependencies":{"jsqr":"1.4.0","pngjs":"7.0.0"}}
