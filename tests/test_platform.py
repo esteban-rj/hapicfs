@@ -364,7 +364,7 @@ def test_specialist_catalog_creation_and_scope(client, app):
         home = app.state.store.agent_path(agent) / "hermes"
         assert (home / "SOUL.md").exists() and "Sin recuerdos" in (home / "memories/MEMORY.md").read_text(encoding="utf-8")
         config = yaml.safe_load((home / "config.yaml").read_text(encoding="utf-8"))
-        assert ("generate_project_image" in config["mcp_servers"]["hapic"]["tools"]["include"]) == (kind == "graphic-designer")
+        assert ("generate_project_image" in config["mcp_servers"]["hapic"]["tools"]["include"]) == (kind in {"graphic-designer", "community-manager"})
     assert client.post(f"/api/projects/{p['id']}/agents", json={"name": "bad", "template": "../secrets"}).status_code == 400
     assert client.post(f"/api/projects/{p['id']}/agents", json={"name": "bad", "template": "coder"}).status_code == 400
     other_project = project(client)
@@ -389,7 +389,7 @@ def test_community_manager_mcp_creation_and_drafts_with_unconnected_youtube(clie
     repeated = service.tool(hapic, "create_specialist_agent", args)
     assert repeated["already_exists"] and repeated["id"] == manager["id"]
     config = yaml.safe_load((store.agent_path(manager) / "hermes/config.yaml").read_text(encoding="utf-8"))
-    assert set(config["mcp_servers"]["hapic"]["tools"]["include"]) == {"project_list_files", "project_read_file", "project_write_file", "youtube_get_channel", "youtube_list_videos", "youtube_list_comments", "youtube_get_analytics", "heygen_generate_video", "heygen_get_video", "heygen_list_videos"}
+    assert set(config["mcp_servers"]["hapic"]["tools"]["include"]) == {"project_list_files", "project_read_file", "project_write_file", "generate_project_image", "youtube_get_channel", "youtube_list_videos", "youtube_list_comments", "youtube_get_analytics", "heygen_generate_video", "heygen_get_video", "heygen_list_videos"}
     with pytest.raises(ValueError, match="pendiente de conexión"):
         service.tool(manager, "youtube_get_channel", {})
     draft = "id,fecha,canal,estado\n1,2026-11-06,instagram,borrador\n"
@@ -397,7 +397,7 @@ def test_community_manager_mcp_creation_and_drafts_with_unconnected_youtube(clie
     assert saved["saved"]
     restarted = Service(Store(store.root), TestRuntime())
     assert restarted.tool(restarted.agent(manager["id"]), "project_read_file", {"path": "calendario-editorial.csv"})["content"] == draft
-    for tool in ("publish_social_post", "reply_social_comment", "get_social_metrics", "generate_project_image", "create_specialist_agent"):
+    for tool in ("publish_social_post", "reply_social_comment", "get_social_metrics", "create_specialist_agent"):
         with pytest.raises(PermissionError):
             service.tool(manager, tool, {})
     assert any(a["id"] == manager["id"] for a in service.tool(hapic, "list_project_agents", {})["agents"])

@@ -255,17 +255,33 @@ export function VideoPreview({ src, name, download }: { src: string; name: strin
   </figure>;
 }
 
+function ReadableCopy({ value, depth = 0 }: { value: unknown; depth?: number }) {
+  if (depth > 4) return <span>Consulta el documento completo.</span>;
+  if (Array.isArray(value)) return <ul>{value.map((item, index) => <li key={index}><ReadableCopy value={item} depth={depth + 1} /></li>)}</ul>;
+  if (value && typeof value === "object") return <dl className="readable-copy">{Object.entries(value).map(([key, item]) => <div key={key}><dt>{key.replace(/_/g, " ").replace(/^./, (letter) => letter.toUpperCase())}</dt><dd><ReadableCopy value={item} depth={depth + 1} /></dd></div>)}</dl>;
+  return <span>{value === null ? "Sin especificar" : typeof value === "boolean" ? value ? "Sí" : "No" : String(value)}</span>;
+}
+
 function MessageContent({ message, agent }: { message: Message; agent: Agent }) {
   // Render local workspace image references only; no HTML or arbitrary remote requests.
   const pieces = message.content.split(/(!\[[^\]]*\]\([^)]+\))/g);
+  let readable: unknown;
+  if (agent.kind === "community-manager" && message.role === "assistant" && message.source === "task") {
+    try { const parsed = JSON.parse(message.content); if (parsed && typeof parsed === "object") readable = parsed; } catch { /* Existing prose stays unchanged. */ }
+  }
   return <>
-    {pieces.map((piece, index) => {
+    {readable ? <ReadableCopy value={readable} /> : pieces.map((piece, index) => {
       const match = piece.match(/^!\[([^\]]*)\]\(([^)]+)\)$/);
       if (!match) return piece ? <p key={index}>{piece.split(/(https?:\/\/(?:127\.0\.0\.1|localhost):\d+(?:\/[^\s<>]*)?|\/api\/agents\/agt_[A-Za-z0-9]+\/preview\/open)/g).map((part, position) => /^(?:https?:\/\/(?:127\.0\.0\.1|localhost):\d+|\/api\/agents\/agt_[A-Za-z0-9]+\/preview\/open$)/.test(part) ? <a key={position} href={part.replace(/[.,;)]+$/, "")} target="_blank" rel="noreferrer">{part.startsWith("/api/") ? "Abrir vista previa" : part}</a> : part)}</p> : null;
       const raw = match[2].replace(/^<|>$/g, "");
       if (/^(?:https?:|data:|javascript:|\/\/)/i.test(raw)) return <p key={index}>{match[1] || "Referencia de imagen externa"}</p>;
       const relative = raw.replace(/^\/workspace\//, "").replace(/^\.\//, "");
       const path = relative.startsWith("agents/") || relative.startsWith("workspace/") ? relative : `agents/${agent.id}/workspace/${relative}`;
+      if (!/\.(png|jpe?g|webp|gif)$/i.test(path)) {
+        if (/\.mp4$/i.test(path)) return <VideoPreview key={path} src={videoUrl(agent.project_id, path)} name={match[1] || relative} download={videoUrl(agent.project_id, path, true)} />;
+        const url = `/api/projects/${agent.project_id}/artifacts/open?path=${encodeURIComponent(path)}`;
+        return <div className="document-attachment" key={path}><FileText size={17} /><strong>{match[1] || relative}</strong><a href={url} target="_blank" rel="noreferrer">Abrir documento</a><a href={url + "&download=true"} download>Descargar</a></div>;
+      }
       return <ImagePreview key={path} src={imageUrl(agent.project_id, path)} alt={match[1] || relative} download={imageUrl(agent.project_id, path, true)} />;
     })}
     {message.attachments?.map((item) => item.mime_type === "video/mp4" ? <VideoPreview key={item.id} src={videoUrl(agent.project_id, item.path)} name={item.name} download={videoUrl(agent.project_id, item.path, true)} /> : item.mime_type.startsWith("image/") ? <ImagePreview key={item.id} src={imageUrl(agent.project_id, item.path)} alt={item.name} download={imageUrl(agent.project_id, item.path, true)} /> : <div className="document-attachment" key={item.id}><FileText size={17} /><strong>{item.name}</strong><a href={item.url} target="_blank" rel="noreferrer">Abrir documento</a><a href={item.url + "&download=true"} download>Descargar</a><small>{item.path}</small></div>)}

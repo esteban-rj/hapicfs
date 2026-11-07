@@ -16,9 +16,12 @@ def platform_instructions(agent, store=None):
     from .storage import ROOT
     if agent["kind"] == "hapic":
         text = (ROOT / "templates/hapic/SOUL.md").read_text(encoding="utf-8")
+    elif agent["kind"] == "community-manager":
+        text = (ROOT / "templates/community-manager/SOUL.md").read_text(encoding="utf-8")
+        text += " Estas instrucciones actuales de Community Manager prevalecen sobre instrucciones antiguas de tu perfil que nieguen generación de imágenes o pidan entregar JSON al usuario."
     else:
         text = "Usa solo las herramientas autorizadas de Hapic. Los archivos persisten en /workspace. No inventes archivos, imágenes ni resultados de ejecución."
-    if agent["kind"] in {"ux", "graphic-designer"}:
+    if agent["kind"] in {"ux", "graphic-designer", "community-manager"}:
         text += " Para generar imágenes solicitadas usa generate_project_image. Guarda y adjunta un PNG real al chat; no basta con describir una imagen. No repitas una llamada que devolvió saved=true."
     if store:
         names = effective_tools(agent, store)

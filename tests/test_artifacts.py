@@ -69,7 +69,7 @@ def test_generated_image_is_included_even_without_a_predetermined_filename(tmp_p
     service = app.state.service
     org = service.create_org('Estudio')
     project = service.create_project(org['id'], 'Visuales')
-    designer = service.create_agent(project['id'], 'Diseño', 'graphic-designer')
+    designer = service.create_agent(project['id'], 'Mariana', 'community-manager')
     coordinator = service.store.one("SELECT * FROM agents WHERE kind='hapic'")
     service.store.secret('openai', 'test-not-real')
     service.store.execute("UPDATE agents SET container_id='test' WHERE id=?", (designer['id'],))
