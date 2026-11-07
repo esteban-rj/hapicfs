@@ -305,7 +305,7 @@ def create_app(data_dir: Path | None = None, runtime=None):
 
     @app.get("/api/capabilities")
     def capabilities():
-        return {"docker": service.runtime.health(), "openai": {"configured": bool(store.api_key()), "source": "environment" if os.getenv("OPENAI_API_KEY") else "server"}, "local_only": True}
+        return {"docker": service.runtime.health(), "openai": {"configured": bool(store.api_key()), "source": "environment" if os.getenv("OPENAI_API_KEY") and not store.secret("openai") else "server"}, "local_only": True}
 
     @app.get("/api/tools")
     def tool_catalog():
@@ -569,8 +569,6 @@ def create_app(data_dir: Path | None = None, runtime=None):
 
     @app.put("/api/settings/openai")
     def save_key(body: KeyInput):
-        if os.getenv("OPENAI_API_KEY"):
-            raise ValueError("La credencial está definida en el entorno del servidor. Actualízala allí.")
         if not body.api_key.startswith("sk-") or any(c.isspace() for c in body.api_key):
             raise ValueError("La API key no tiene un formato válido.")
         store.secret("openai", body.api_key)

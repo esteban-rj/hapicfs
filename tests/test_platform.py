@@ -194,6 +194,25 @@ def test_keys_encrypted_redacted_and_excluded(client, app):
     assert not app.state.store.api_key()
 
 
+def test_openai_key_can_override_environment(client, app, monkeypatch):
+    environment_key = "sk-proj-" + "environment" * 4
+    replacement_key = "sk-proj-" + "replacement" * 4
+    monkeypatch.setenv("OPENAI_API_KEY", environment_key)
+    assert app.state.store.api_key() == environment_key
+    assert client.get("/api/capabilities").json()["openai"] == {"configured": True, "source": "environment"}
+
+    result = client.put("/api/settings/openai", json={"api_key": replacement_key})
+    assert result.status_code == 200
+    assert replacement_key not in result.text
+    assert app.state.store.api_key() == replacement_key
+    assert client.get("/api/capabilities").json()["openai"] == {"configured": True, "source": "server"}
+
+    result = client.delete("/api/settings/openai")
+    assert result.status_code == 200 and result.json()["configured"]
+    assert app.state.store.api_key() == environment_key
+    assert client.get("/api/capabilities").json()["openai"]["source"] == "environment"
+
+
 def test_sessions_csrf_origin_and_membership(client, app):
     assert client.post("/api/organizations", json={"name": "no"}, headers={"X-Hapic-CSRF": "wrong"}).status_code == 403
     assert client.post("/api/organizations", json={"name": "no"}, headers={"Origin": "https://attacker.example"}).status_code == 403

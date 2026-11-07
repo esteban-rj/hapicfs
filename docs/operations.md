@@ -37,7 +37,7 @@ La salud de FastAPI solo confirma el control de gestión. En la interfaz, abre e
 
 En la plataforma: **Configuración → Conexión con OpenAI → API key → Guardar credencial**.
 
-También se admite `OPENAI_API_KEY` en el entorno del servidor o en `.env`. Cuando está definida en el entorno, la UI informa de su origen y no permite reemplazarla desde el formulario. Compose interpola la variable para el control de gestión.
+También se admite `OPENAI_API_KEY` en el entorno del servidor o en `.env`. La UI informa de su origen y permite guardar una clave que tiene prioridad sobre el entorno. Al eliminar la clave guardada, vuelve a usarse la del entorno. Compose interpola la variable para el control de gestión.
 
 No incluyas la key en chats, comandos guardados, incidencias ni capturas. La API solo devuelve si está configurada y su origen.
 
