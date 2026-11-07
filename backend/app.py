@@ -8,6 +8,8 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 from urllib.parse import urlparse, urlencode
 
+import ipaddress
+
 from fastapi import BackgroundTasks, FastAPI, HTTPException, Request, Response
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import FileResponse, JSONResponse, RedirectResponse
@@ -165,8 +167,14 @@ def create_app(data_dir: Path | None = None, runtime=None):
                 return JSONResponse({"detail": "Autorización MCP requerida."}, status_code=401)
         else:
             host = request.url.hostname
-            if host not in {"localhost", "127.0.0.1", "::1"}:
-                return JSONResponse({"detail": "Esta versión solo permite acceso local."}, status_code=403)
+            allowed_local = {"localhost", "127.0.0.1", "::1"}
+            try:
+                if host and ipaddress.ip_address(host).is_private:
+                    allowed_local.add(host)
+            except ValueError:
+                pass
+            if host not in allowed_local:
+                return JSONResponse({"detail": "Esta versión solo permite acceso local o en la misma red privada."}, status_code=403)
             if path.startswith("/api/") and path not in {"/api/bootstrap", "/api/health"}:
                 session = store.one("SELECT * FROM sessions WHERE token=?", (request.cookies.get("hapic_session", ""),))
                 if not session:
