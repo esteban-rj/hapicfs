@@ -2365,7 +2365,3 @@ textarea::placeholder {
   gap: 8px;
   margin-top: 8px;
 }
-.demo-chat-actions .primary,
-.demo-chat-actions .secondary {
-  min-height: 34px;
-}
