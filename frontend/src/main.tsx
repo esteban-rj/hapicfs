@@ -95,6 +95,7 @@ function App() {
   const [tab, setTab] = useState<"Conversación" | "Archivos" | "Actividad">(
     "Conversación",
   );
+  const [expandedProjects, setExpandedProjects] = useState<Record<string, boolean>>({});
   const [model, setModel] = useState("gpt-6.1-sol");
   const [effort, setEffort] = useState("xhigh");
   const [key, setKey] = useState("");
@@ -207,6 +208,12 @@ function App() {
     },
     [state],
   );
+  const toggleProject = useCallback((projectIdToToggle: string) => {
+    setExpandedProjects((current) => ({
+      ...current,
+      [projectIdToToggle]: !(current[projectIdToToggle] ?? false),
+    }));
+  }, []);
   useEffect(() => {
     if (projectId && !projects.some((p) => p.id === projectId)) {
       setProjectId("");
@@ -454,33 +461,49 @@ function App() {
             </button>
           </div>
           {projects.length > 0 ? (
-            projects.map((p) => (
-              <div key={p.id}>
-                <button
-                  className={"project-nav " + (projectId === p.id ? "current" : "")}
-                  onClick={() => openProject(p)}
-                >
-                  <Folder size={15} />
-                  <span>{p.name}</span>
-                </button>
-                {projectId === p.id
-                  ? state?.agents
-                      .filter((a) => a.project_id === p.id)
-                      .map((a) => (
-                        <button
-                          className={"agent-nav " + (a.id === agentId ? "current" : "")}
-                          key={a.id}
-                          onClick={() => openAgent(a)}
-                        >
-                          <span>
-                            {a.kind === "hapic" ? "H" : a.name[0].toUpperCase()}
-                          </span>
-                          {a.name}
-                        </button>
-                      ))
-                  : null}
-              </div>
-            ))
+            projects.map((p) => {
+              const projectAgents = state?.agents.filter((a) => a.project_id === p.id) || [];
+              const isExpanded = expandedProjects[p.id] ?? projectId === p.id;
+              return (
+                <div key={p.id} className="project-group">
+                  <button
+                    className={"project-nav " + (projectId === p.id ? "current" : "")}
+                    onClick={() => {
+                      if (!isExpanded) {
+                        toggleProject(p.id);
+                      }
+                      openProject(p);
+                    }}
+                  >
+                    <span className="project-toggle">
+                      {isExpanded ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
+                    </span>
+                    <Folder size={15} />
+                    <span>{p.name}</span>
+                  </button>
+                  {isExpanded ? (
+                    <div className="agent-submenu">
+                      {projectAgents.length ? (
+                        projectAgents.map((a) => (
+                          <button
+                            className={"agent-nav " + (a.id === agentId ? "current" : "")}
+                            key={a.id}
+                            onClick={() => openAgent(a)}
+                          >
+                            <span>
+                              {a.kind === "hapic" ? "H" : a.name[0].toUpperCase()}
+                            </span>
+                            {a.name}
+                          </button>
+                        ))
+                      ) : (
+                        <div className="agent-empty">Sin agentes</div>
+                      )}
+                    </div>
+                  ) : null}
+                </div>
+              );
+            })
           ) : (
             <p className="tiny muted">Tus proyectos aparecerán aquí.</p>
           )}
@@ -1012,11 +1035,16 @@ function App() {
                   )}
                 </>
               ) : (
-                <AgentTable
-                  agents={agents}
-                  projects={projects}
-                  open={openAgent}
-                />
+                <>
+                  <div className="action-demo-block">
+                    <DemoChatContainer />
+                  </div>
+                  <AgentTable
+                    agents={agents}
+                    projects={projects}
+                    open={openAgent}
+                  />
+                </>
               )
             ) : null}
             {page === "Plantillas" && templates.length ? (
@@ -1499,8 +1527,73 @@ function RuntimeCard({ agent, runtime }: { agent: Agent; runtime: any }) {
     </section>
   );
 }
+function DemoChatContainer() {
+  const demoMessages = [
+    {
+      id: 1,
+      role: "agent",
+      label: "Hapic",
+      text: "He revisado el proyecto y veo dos rutas claras: crear el prototipo visual y preparar el flujo de trabajo del equipo.",
+    },
+    {
+      id: 2,
+      role: "user",
+      label: "Tú",
+      text: "Quiero un contenedor demo para mostrar un chat de agentes interactuando.",
+    },
+    {
+      id: 3,
+      role: "agent",
+      label: "UX",
+      text: "Listo. Ya tengo la estructura visual: chat principal, historial y panel lateral con estado del agente.",
+    },
+  ];
+
+  return (
+    <section className="demo-chat-card card">
+      <div className="demo-chat-header">
+        <div className="demo-chat-title">
+          <Mark small />
+          <div>
+            <strong>Agente en ejecución</strong>
+            <span className="tiny muted">Contenedor de chat demo</span>
+          </div>
+        </div>
+        <span className="tag">working</span>
+      </div>
+
+      <div className="demo-chat-messages">
+        {demoMessages.map((message) => (
+          <div key={message.id} className={"demo-message " + message.role}>
+            <div className="demo-bubble">
+              <span className="demo-label">{message.label}</span>
+              <p>{message.text}</p>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      <div className="demo-chat-composer">
+        <textarea rows={2} defaultValue="Quiero crear un prototipo con la vista del flujo de agentes…" />
+        <div className="demo-chat-actions">
+          <button className="secondary" type="button">
+            <Sparkles size={14} />
+            Preparar flujo
+          </button>
+          <button className="primary" type="button">
+            Enviar
+          </button>
+        </div>
+      </div>
+    </section>
+  );
+}
 createRoot(document.getElementById("root")!).render(
   <React.StrictMode>
     <App />
   </React.StrictMode>,
 );
+
+
+
+
