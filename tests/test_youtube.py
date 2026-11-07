@@ -35,12 +35,12 @@ class OfflineRuntime(DockerRuntime):
 
 
 @pytest.fixture
-def youtube_env(tmp_path, monkeypatch):
+def youtube_env(tmp_path, monkeypatch, login):
     monkeypatch.delenv("OPENAI_API_KEY", raising=False)
     monkeypatch.delenv("HAPIC_YOUTUBE_CLIENT_FILE", raising=False)
     application = create_app(tmp_path, OfflineRuntime())
     with TestClient(application, base_url="http://localhost") as client:
-        bootstrap = client.get("/api/bootstrap")
+        bootstrap = login(client)
         assert "SameSite=lax" in bootstrap.headers["set-cookie"]
         client.headers["X-Hapic-CSRF"] = bootstrap.json()["csrf"]
         service = application.state.service
@@ -133,7 +133,44 @@ def test_google_client_encrypted_and_never_exported(youtube_env):
         assert response.status_code in {400, 422} and CLIENT_SECRET not in response.text
 
 
-def test_oauth_pkce_session_state_replay_and_channel_identity(youtube_env):
+@pytest.mark.parametrize("source", ["server", "file"])
+def test_oauth_uses_current_origin_with_older_client_json(youtube_env, tmp_path, monkeypatch, login, source):
+    application, client, project = youtube_env
+    client.base_url = httpx.URL("http://127.0.0.1:8001")
+    login(client)
+    config = credentials("127.0.0.1:8000")
+    if source == "file":
+        config_file = tmp_path / "server-google-client.json"
+        config_file.write_text(json.dumps(config))
+        monkeypatch.setenv("HAPIC_YOUTUBE_CLIENT_FILE", str(config_file))
+    else:
+        assert client.put("/api/settings/youtube", json={"credentials": config}).status_code == 200
+
+    expected_redirect = "http://127.0.0.1:8001" + CALLBACK_PATH
+    assert client.get("/api/settings/youtube").json()["redirect_uri"] == expected_redirect
+    provider = GoogleDouble()
+    application.state.service.youtube.transport = httpx.MockTransport(provider)
+    started = client.post(f"/api/projects/{project['id']}/connections/youtube/authorize")
+    assert started.status_code == 200, started.text
+    query = parse_qs(urlparse(started.json()["authorization_url"]).query)
+    assert query["redirect_uri"] == [expected_redirect]
+
+    completed = client.get(CALLBACK_PATH, params={"state": query["state"][0], "code": "test-code"}, follow_redirects=False)
+    assert "youtube=connected" in completed.headers["location"]
+    exchange = next(request for request in provider.requests if request.url.path == "/token")
+    assert parse_qs(exchange.content.decode())["redirect_uri"] == [expected_redirect]
+
+
+@pytest.mark.parametrize("base_url", ["https://example.com", "http://192.168.1.10:8001"])
+def test_oauth_still_requires_loopback_return_address(youtube_env, base_url):
+    application, client, project = youtube_env
+    assert client.put("/api/settings/youtube", json={"credentials": credentials()}).status_code == 200
+    with pytest.raises(ValueError, match="dirección local"):
+        application.state.service.youtube.authorize(project["id"], "test-session", base_url)
+    assert application.state.store.one("SELECT 1 FROM oauth_states") is None
+
+
+def test_oauth_pkce_session_state_replay_and_channel_identity(youtube_env, login):
     application, client, project = youtube_env
     manager = application.state.service.create_agent(project["id"], "Manager", "community-manager")
     provider, query = begin(application, client, project)
@@ -144,7 +181,7 @@ def test_oauth_pkce_session_state_replay_and_channel_identity(youtube_env):
     # The application's MCP lifespan is already running in the main client.
     other = TestClient(application, base_url="http://localhost")
     try:
-        other.get("/api/bootstrap")
+        login(other)
         rejected = other.get(CALLBACK_PATH, params={"state": query["state"][0], "code": "stolen-code"}, follow_redirects=False)
         assert "youtube=error" in rejected.headers["location"] and provider.requests == []
     finally:
@@ -167,7 +204,7 @@ def test_oauth_pkce_session_state_replay_and_channel_identity(youtube_env):
     assert REFRESH.encode() not in encrypted.read_bytes()
 
 
-@pytest.mark.parametrize("case", ["expired", "denied", "forged", "missing_scope", "no_channel", "wrong_redirect"])
+@pytest.mark.parametrize("case", ["expired", "denied", "forged", "missing_scope", "no_channel", "multiple_channels", "wrong_redirect"])
 def test_oauth_rejects_invalid_or_incomplete_authorization(youtube_env, case):
     application, client, project = youtube_env
     provider, query = begin(application, client, project)
@@ -183,11 +220,16 @@ def test_oauth_rejects_invalid_or_incomplete_authorization(youtube_env, case):
         provider.missing_analytics = True
     elif case == "no_channel":
         provider.channels = []
+    elif case == "multiple_channels":
+        provider.channels *= 2
     elif case == "wrong_redirect":
         application.state.store.execute("UPDATE oauth_states SET redirect_uri='http://127.0.0.1/wrong'")
     response = client.get(CALLBACK_PATH, params=params, follow_redirects=False)
     assert "youtube=error" in response.headers["location"]
     assert "private-provider-data" not in response.headers["location"]
+    returned = parse_qs(urlparse(response.headers["location"]).query)
+    assert returned.get("youtube_error") == (["channel_required"] if case == "no_channel" else None)
+    assert all(value not in response.headers["location"] for value in (ACCESS, REFRESH, CLIENT_SECRET, params["code"], params["state"]))
     assert client.get(f"/api/projects/{project['id']}/tools").json()["connections"] == []
     if case in {"expired", "denied", "forged", "wrong_redirect"}:
         assert provider.requests == []

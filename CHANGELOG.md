@@ -12,6 +12,16 @@ Este archivo registra los cambios del proyecto. Las versiones siguen el esquema 
 - Animaciones vinculadas a ejecución confirmada, sin iniciar runtimes ni enviar mensajes al abrir la vista; recursos gráficos liberados al cerrar.
 - Pruebas de aislamiento y estados, y recorrido en navegador con FastAPI/SQLite temporales y sin credenciales de proveedores.
 
+### Comunicación por voz
+
+- Micrófono en la conversación de todos los agentes, grabaciones de hasta 60 segundos, transcripción revisable y envío al chat existente con identidad estable de reintento.
+- Transcripción OpenAI Audio con la key del servidor, validación de formato y límite de 8 MiB, errores redactados y audio sin persistencia local.
+- Consultas de estado por voz o botón, disponibles durante tareas activas y sin inferencia; distinguen ejecución confirmada, cola, interrupciones y runtime desconectado.
+- Lectura en español de respuestas de voz y estado, reproducción manual del historial y cancelación al cambiar de conversación.
+- Verificación: 123 pruebas de servidor y 4 de interpretación de voz aprobadas; build TypeScript/Vite correcto. Chrome con micrófono virtual comprobó grabación real de MediaRecorder, revisión, estado durante tareas dictadas, lectura, reintentos sin duplicación, permisos denegados, cancelación, cambio de agente, límite de 60 segundos y panel móvil. Proveedor de transcripción y runtime ficticios; sin llamadas facturables ni prueba de reconocimiento con voz real.
+- Ejecución local: integración con los cambios existentes de inicio de sesión, caducidad de sesiones y conexión de YouTube. Suite combinada de 151 pruebas aprobadas y compilación Docker correcta, conservando los datos y contenedores de agentes existentes.
+- Integración con `main`: se conservan oficinas 3D, temas y errores legibles de la API. Pruebas de oficina adaptadas a la sesión autenticada; 151 pruebas del servidor, 14 unitarias de interfaz, cuatro recorridos de navegador y compilación aprobados.
+
 ### HeyGen y vídeos persistentes
 
 - Conexión por API key cifrada por proyecto, con verificación de cuenta, clave activa y permisos de lectura/generación mediante la API v3.

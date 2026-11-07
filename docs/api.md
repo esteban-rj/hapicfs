@@ -4,7 +4,7 @@ La URL predeterminada es `http://127.0.0.1:8000`. La API utiliza JSON y está di
 
 ## Sesión
 
-`GET /api/bootstrap` establece la cookie `hapic_session` (HttpOnly y SameSite Lax para permitir el retorno GET de Google OAuth) y devuelve un token `csrf`. Las operaciones que modifican datos requieren esa cookie y el encabezado `X-Hapic-CSRF`. Cuando se envía `Origin`, debe coincidir con el origen de la solicitud.
+`POST /api/auth/login` recibe `username` y `password`, establece la cookie `hapic_session` (HttpOnly y SameSite Lax para permitir el retorno GET de Google OAuth) y devuelve un token `csrf`. `GET /api/bootstrap` recupera la sesión autenticada. Las sesiones caducan a las 24 horas y se invalidan al cambiar las credenciales; `POST /api/auth/logout` revoca la sesión actual. Las operaciones que modifican datos requieren la cookie y el encabezado `X-Hapic-CSRF`. Cuando se envía `Origin`, debe coincidir con el origen de la solicitud.
 
 Los hosts de la interfaz y API se limitan a `localhost`, `127.0.0.1` y `::1`. Los endpoints MCP usan autenticación separada con Bearer token por agente y protección contra DNS rebinding.
 
@@ -13,7 +13,9 @@ Los hosts de la interfaz y API se limitan a `localhost`, `127.0.0.1` y `::1`. Lo
 | Método | Ruta | Uso |
 | --- | --- | --- |
 | GET | `/api/health` | Salud del control de gestión; no comprueba inferencia |
-| GET | `/api/bootstrap` | Establecer sesión local y obtener CSRF |
+| GET | `/api/bootstrap` | Recuperar sesión autenticada y CSRF |
+| POST | `/api/auth/login` | Iniciar sesión con `username` y `password` |
+| POST | `/api/auth/logout` | Cerrar sesión; requiere CSRF |
 | GET | `/api/state` | Organizaciones, proyectos y agentes autorizados; ajustes globales |
 | GET | `/api/capabilities` | Conexión Docker y presencia/origen de la credencial, sin su valor |
 | POST | `/api/organizations` | Crear organización: `{"name":"Estudio"}` |
@@ -25,6 +27,8 @@ Los hosts de la interfaz y API se limitan a `localhost`, `127.0.0.1` y `::1`. Lo
 | GET | `/api/agents/{agent_id}/runtime` | Estado actual y readiness de Hermes |
 | GET | `/api/agents/{agent_id}/messages` | Historial visible de la plataforma |
 | GET | `/api/agents/{agent_id}/events` | Hasta 100 eventos recientes |
+| GET | `/api/agents/{agent_id}/voice/status` | Resumen factual del runtime, turnos y tareas con `content`, `agent_id` y `checked_at`; disponible mientras el agente trabaja |
+| POST | `/api/agents/{agent_id}/voice/transcriptions` | Audio binario WebM, MP4 o WAV, con su `Content-Type`, máximo 8 MiB; devuelve `{"text":"…"}` sin guardar audio ni iniciar tareas |
 | POST | `/api/agents/{agent_id}/chat` | Enviar turno con `content` y `request_id` único |
 | GET | `/api/projects/{project_id}/tree` | Árbol real filtrado del proyecto |
 | GET | `/api/projects/{project_id}/file?path=…` | Vista previa de documento permitido |
@@ -57,6 +61,8 @@ Un turno puede incluir, por ejemplo:
   "request_id": "identificador-unico-del-turno"
 }
 ```
+
+La transcripción requiere sesión, CSRF, pertenencia al agente y una key de OpenAI en el servidor; no necesita Docker ni adquiere el bloqueo del chat. Valida el tipo, la firma del contenedor de audio y el tamaño antes de llamar a `/v1/audio/transcriptions`. El audio solo se mantiene en memoria durante la solicitud. Un formato no admitido devuelve `415`, un exceso de tamaño `413` y un fallo del proveedor `503` con un mensaje redactado. No se reintentan automáticamente solicitudes facturables. El texto revisado se envía por la ruta habitual `/chat` con un `request_id` estable para los reintentos del mismo mensaje de voz.
 
 Reutiliza un `request_id` solo para reintentar exactamente el mismo turno del mismo agente. Si cambia su identidad, la API devuelve `409`. Si hay un turno o provisión activos, también puede devolver `409`. Tras un fallo de transporte, la ejecución remota puede haber comenzado: revisa la actividad antes de repetir acciones con un identificador nuevo.
 

@@ -9,7 +9,7 @@ from backend.artifacts import artifact_file, list_artifacts
 from backend.runtime import DockerRuntime
 
 
-def test_deliverables_are_local_scoped_and_render_html_as_text(tmp_path):
+def test_deliverables_are_local_scoped_and_render_html_as_text(tmp_path, login):
     app = create_app(tmp_path)
     service = app.state.service
     org = service.create_org('Estudio')
@@ -25,7 +25,7 @@ def test_deliverables_are_local_scoped_and_render_html_as_text(tmp_path):
     script = next(item for item in files if item['name'] == 'pieza.html')
     with TestClient(app, base_url='http://localhost') as client:
         assert client.get(script['url']).status_code == 401
-        client.get('/api/bootstrap')
+        login(client)
         response = client.get(script['url'])
         assert response.status_code == 200
         assert response.headers['content-type'].startswith('text/plain')

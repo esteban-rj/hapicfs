@@ -1,9 +1,26 @@
 let csrf = "";
+export type Session = { csrf: string; user: { id: string; name: string }; mode: string };
+let bootstrapPromise: Promise<Session> | undefined;
+export class ApiError extends Error {
+  readonly status: number;
+  constructor(message: string, status: number) {
+    super(message);
+    this.status = status;
+    this.name = "ApiError";
+  }
+}
+
+function clearSession() {
+  csrf = "";
+  bootstrapPromise = undefined;
+}
+
 export async function api<T = any>(
   path: string,
   options: RequestInit = {},
 ): Promise<T> {
   const response = await fetch("/api" + path, {
+    credentials: "same-origin",
     ...options,
     headers: {
       "Content-Type": "application/json",
@@ -11,29 +28,35 @@ export async function api<T = any>(
       ...options.headers,
     },
   });
+  if (response.status === 401 && !path.startsWith("/auth/")) {
+    clearSession();
+    window.dispatchEvent(new Event("hapic:unauthorized"));
+  }
   let data;
   try {
     data = await response.json();
   } catch {
-    throw new Error(
+    throw new ApiError(
       response.status >= 500
         ? "Ocurrió un error interno en el servidor. Recarga la página o vuelve a intentarlo."
         : response.ok
           ? "El servidor devolvió una respuesta no válida. Recarga la página."
           : `No se pudo completar la solicitud (HTTP ${response.status}).`,
+      response.status,
     );
   }
-  if (!response.ok)
-    throw new Error(
+  if (!response.ok) {
+    throw new ApiError(
       data && typeof data.detail === "string"
         ? data.detail
         : "No se pudo completar la solicitud. Revisa los campos.",
+      response.status,
     );
+  }
   return data;
 }
-let bootstrapPromise: Promise<any> | undefined;
 export function bootstrap() {
-  return (bootstrapPromise ??= api("/bootstrap")
+  return (bootstrapPromise ??= api<Session>("/bootstrap")
     .then((data) => {
       csrf = data.csrf;
       return data;
@@ -50,6 +73,22 @@ export const post = <T = any>(path: string, body?: unknown) =>
   });
 export const put = <T = any>(path: string, body: unknown) =>
   api<T>(path, { method: "PUT", body: JSON.stringify(body) });
+
+export async function login(username: string, password: string) {
+  const session = await post<Session>("/auth/login", { username, password });
+  csrf = session.csrf;
+  bootstrapPromise = Promise.resolve(session);
+  return session;
+}
+
+export async function logout() {
+  try {
+    await post("/auth/logout");
+  } catch (error) {
+    if (!(error instanceof ApiError && error.status === 401)) throw error;
+  }
+  clearSession();
+}
 
 export type Org = { id: string; name: string };
 export type Project = {

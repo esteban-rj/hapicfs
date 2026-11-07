@@ -29,6 +29,7 @@ flowchart LR
 | Plantillas | Comportamiento y método revisables, sin estado privado | `templates/` |
 | Herramientas | Catálogo de integraciones y permisos efectivos por agente | `backend/tool_catalog.py` |
 | YouTube | OAuth de Google, tokens cifrados y consultas limitadas al canal asignado | `backend/youtube.py` |
+| Voz | Transcripción de audio acotada con la credencial del servidor; estado factual sin inferencia | `backend/voice.py`, `frontend/src/VoicePanel.tsx` |
 | HeyGen | Claves cifradas por proyecto, trabajos idempotentes y MP4 persistentes | `backend/heygen.py` |
 
 FastAPI sirve el build de Vite en producción. En desarrollo, Vite reenvía `/api` al backend. El chat actual espera una respuesta completa del servidor; la interfaz no implementa streaming de tokens.
@@ -83,6 +84,10 @@ Cada agente tiene un `HERMES_HOME` montado en `/opt/data` y un workspace distint
 Las carpetas organizan el estado. La autorización de la API, los tokens por agente, las herramientas permitidas y los montajes Docker controlan el acceso. Las instrucciones del modelo no sustituyen esos controles.
 
 Las plantillas contienen `SOUL.md`, definición y habilidades. Al crear un perfil se inicializa memoria vacía; nunca se clonan `state.db`, credenciales o recuerdos privados de un agente usado.
+
+### Voz
+
+La interfaz graba con `MediaRecorder` y cierra el micrófono al terminar, cancelar o salir de la conversación. El servidor recibe hasta 8 MiB de WebM, MP4 o WAV y transcribe mediante OpenAI Audio; el audio no se escribe al disco ni se registra en el historial. Tras revisar el texto, la tarea usa el chat existente y su control de concurrencia e idempotencia. Las consultas de estado usan una ruta de lectura separada, autorizada para el mismo agente, que combina ejecución, tareas y comprobación de runtime. La reproducción de respuestas usa `speechSynthesis` del navegador; no modifica el modelo conversacional ni crea un agente adicional.
 
 ### Planes compartidos
 

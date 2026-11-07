@@ -17,6 +17,7 @@ from .storage import ROOT, DEFAULT_MODEL, Store, now, uid
 from .templates import SPECIALISTS, template as load_template
 from .tool_catalog import CATALOG, defaults, effective_tools
 from .youtube import YouTube
+from .voice import VoiceTranscriber
 
 SAFE_EXTENSIONS = {".md", ".txt", ".json", ".yaml", ".yml", ".csv", ".html", ".css", ".svg", ".py", ".js", ".jsx", ".ts", ".tsx", ".mjs", ".cjs", ".sql", ".toml", ".xml", ".scss", ".vue", ".svelte", ".go", ".rs", ".java", ".kt", ".c", ".h", ".cpp", ".cs", ".sh", ".ps1"}
 HIDDEN_NAMES = {"secrets", ".env", "auth.json", "logs", "cache", "installs", ".git", "node_modules", "mcp-tokens"}
@@ -65,6 +66,7 @@ class Service:
         self.store = store
         self.runtime = runtime or DockerRuntime()
         self.images = ImageGenerator()
+        self.voice = VoiceTranscriber()
         self.youtube = YouTube(store, self.project)
         self.heygen = HeyGen(store, self.project)
         self.locks = {}
@@ -98,6 +100,53 @@ class Service:
         return {"busy": busy, "provisioning": agent["status"] == "provisioning", "run": run,
                 "tasks": tasks, "active_tasks": sum(task["executing"] for task in tasks),
                 "queued_tasks": sum(task["state"] == "queued" for task in tasks), "task_timeout_seconds": 600, "max_concurrent_tasks": 2}
+
+    def voice_status(self, agent_id):
+        agent = self.agent(agent_id)
+        execution = self.execution(agent_id)
+        parts = [f"Estado de {agent['name']}."]
+        if execution["provisioning"]:
+            parts.append("Se está preparando su runtime.")
+        elif execution["busy"]:
+            parts.append("Está trabajando en un turno o una tarea.")
+            run = execution["run"]
+            if run and run["state"] == "running" and not any(task["executing"] and task["agent_id"] == agent_id for task in execution["tasks"]):
+                turn = self.store.setting("input-" + run["request_id"])
+                if turn and turn.get("agent_id") == agent_id:
+                    parts.append(f"Mensaje en curso: {turn['content'][:300]}.")
+        else:
+            parts.append("No tiene un turno en ejecución.")
+        scope = "El equipo" if agent["kind"] == "hapic" else "El agente"
+        parts.append(f"{scope} tiene {execution['active_tasks']} tareas en ejecución confirmada y {execution['queued_tasks']} en cola.")
+        unconfirmed = [task for task in execution["tasks"] if task["state"] == "running" and not task["executing"]]
+        if unconfirmed:
+            parts.append(f"Hay {len(unconfirmed)} tareas con ejecución sin confirmar; requieren revisión.")
+        active = [task for task in execution["tasks"] if task["executing"] or task["state"] == "queued"]
+        for task in active[:3]:
+            label = "En ejecución" if task["executing"] else "En cola"
+            parts.append(f"{label}, {task['agent_name']}: {task['objective'][:300]}.")
+            if task["executing"] and task["latest_activity"]:
+                parts.append(f"Última actividad registrada: {task['latest_activity'][:200]}.")
+        if execution["run"] and not execution["busy"]:
+            state = execution["run"]["state"]
+            if state == "interrupted":
+                parts.append("El último turno se interrumpió. Revisa sus avances antes de repetirlo.")
+            elif state == "failed":
+                parts.append("El último turno terminó con un error. Revisa la actividad.")
+            elif state == "running":
+                parts.append("El último turno figura en curso, pero su ejecución no está confirmada; requiere revisión.")
+        if not active and execution["tasks"]:
+            latest = max(execution["tasks"], key=lambda task: task["updated_at"])
+            labels = {"delivered": "Entregada, pendiente de validación", "failed": "Fallida", "blocked": "Bloqueada", "planned": "Asignada"}
+            if latest["state"] in labels:
+                parts.append(f"Última tarea: {latest['objective'][:300]}. {labels[latest['state']]}.")
+        runtime = self.runtime.inspect(agent, self.store)
+        if runtime.get("ready"):
+            parts.append("Su runtime está disponible para conversar.")
+        else:
+            labels = {"pending": "pendiente de iniciar", "provisioning": "en preparación", "starting": "iniciando", "stopped": "detenido", "blocked": "pendiente de configuración", "error": "con error"}
+            parts.append(f"Su runtime está {labels.get(runtime.get('status'), 'sin conexión comprobada')}.")
+        return {"agent_id": agent_id, "content": " ".join(parts), "checked_at": now()}
 
     def project(self, project_id, user="local-owner"):
         result = self.store.one("SELECT p.* FROM projects p JOIN memberships m ON m.organization_id=p.organization_id WHERE p.id=? AND m.user_id=?", (project_id, user))

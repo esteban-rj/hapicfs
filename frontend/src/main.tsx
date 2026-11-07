@@ -22,6 +22,7 @@ import {
   Moon,
   Palette,
   PenTool,
+  LogOut,
   Plus,
   RefreshCw,
   Search,
@@ -34,7 +35,6 @@ import {
 } from "lucide-react";
 import {
   api,
-  bootstrap,
   post,
   put,
   agentRoles,
@@ -46,6 +46,7 @@ import {
   type Project,
   type State,
   type Template,
+  type Session,
 } from "./api";
 import {
   Badge,
@@ -63,6 +64,7 @@ import "./style.css";
 import { ModelSelect } from "./ModelSelect";
 import { ToolsPanel } from "./ToolsPanel";
 import { TeamDemo } from "./TeamDemo";
+import { AuthGate } from "./Auth";
 
 const ProjectOffice = lazy(() => import("./ProjectOffice"));
 
@@ -84,7 +86,7 @@ const nav = [
   { name: "Herramientas" as Page, icon: Wrench },
   { name: "Configuración" as Page, icon: Settings },
 ];
-function App() {
+function App({ session, onLogout }: { session: Session; onLogout: () => Promise<void> }) {
   const [state, setState] = useState<State>();
   const [caps, setCaps] = useState<Capabilities>();
   const [templates, setTemplates] = useState<Template[]>([]);
@@ -140,13 +142,10 @@ function App() {
     );
   }, []);
   useEffect(() => {
-    bootstrap()
-      .then(() =>
-        Promise.all([
-          refresh(),
-          api<Template[]>("/templates").then(setTemplates),
-        ]),
-      )
+    Promise.all([
+      refresh(),
+      api<Template[]>("/templates").then(setTemplates),
+    ])
       .catch((e) => setError(e.message));
   }, [refresh]);
   useEffect(() => {
@@ -163,7 +162,9 @@ function App() {
       }
       setToast("Canal de YouTube conectado. Ya puedes asignarlo a tus agentes.");
     } else {
-      setError("No se pudo completar la conexión con Google. Comprueba los usuarios de prueba, concede ambos permisos de lectura y vuelve a conectar el canal.");
+      setError(query.get("youtube_error") === "channel_required"
+        ? "Esta cuenta de Google todavía no tiene un canal de YouTube. Crea el canal en YouTube y vuelve a conectarlo en Hapic con esa misma cuenta."
+        : "No se pudo completar la conexión con Google. Vuelve a conectar el canal e inicia una nueva autorización.");
     }
     window.history.replaceState(null, "", window.location.pathname);
   }, [state]);
@@ -545,9 +546,13 @@ function App() {
         >
           {darkMode ? <SunMedium size={15} /> : <Moon size={15} />}
         </button>
-        <div className="avatar" title="Operador local">
-          Tú
+        <div className="avatar" title={session.user.name} aria-label={"Sesión de " + session.user.name}>
+          {session.user.name.slice(0, 1).toUpperCase()}
         </div>
+        <button className="text-button logout-button" onClick={() => void action(onLogout)} disabled={busy}
+          aria-label="Cerrar sesión" title="Cerrar sesión">
+          <LogOut size={17} /><span>Cerrar sesión</span>
+        </button>
       </header>
       <aside className="sidebar">
         <nav>
@@ -1020,6 +1025,7 @@ function App() {
                       <Chat
                         key={agent.id}
                         agent={agent}
+                        voiceConfigured={!!caps?.openai.configured}
                         connected={
                           !!runtime?.ready && !!caps?.openai.configured
                         }
@@ -1699,6 +1705,6 @@ function RuntimeCard({ agent, runtime }: { agent: Agent; runtime: any }) {
 }
 createRoot(document.getElementById("root")!).render(
   <React.StrictMode>
-    <App />
+    <AuthGate>{(session, onLogout) => <App session={session} onLogout={onLogout} />}</AuthGate>
   </React.StrictMode>,
 );

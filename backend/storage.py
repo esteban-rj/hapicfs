@@ -75,6 +75,11 @@ class Store:
                 db.execute("ALTER TABLE agents ADD COLUMN planner_id TEXT REFERENCES agents(id)")
             if "credential_fingerprint" not in {row[1] for row in db.execute("PRAGMA table_info(video_jobs)")}:
                 db.execute("ALTER TABLE video_jobs ADD COLUMN credential_fingerprint TEXT")
+            session_columns = {row[1] for row in db.execute("PRAGMA table_info(sessions)")}
+            if "expires_at" not in session_columns:
+                db.execute("ALTER TABLE sessions ADD COLUMN expires_at INTEGER NOT NULL DEFAULT 0")
+            if "credential_fingerprint" not in session_columns:
+                db.execute("ALTER TABLE sessions ADD COLUMN credential_fingerprint TEXT NOT NULL DEFAULT ''")
 
     @contextmanager
     def db(self):

@@ -35,10 +35,9 @@ def app(tmp_path, monkeypatch):
 
 
 @pytest.fixture
-def client(app):
+def client(app, login):
     with TestClient(app, base_url="http://localhost") as client:
-        csrf = client.get("/api/bootstrap").json()["csrf"]
-        client.headers["X-Hapic-CSRF"] = csrf
+        login(client)
         yield client
 
 
@@ -101,7 +100,7 @@ def test_execution_lists_real_assignees_and_distinguishes_unconfirmed_running(cl
     assert client.get(f"/api/agents/{other_agent['id']}/execution").json()["tasks"] == []
 
 
-def test_execution_records_failure_and_reconciles_restart(client, app):
+def test_execution_records_failure_and_reconciles_restart(client, app, login):
     from unittest.mock import AsyncMock
     project(client)
     agent = client.get("/api/state").json()["agents"][0]
@@ -113,7 +112,7 @@ def test_execution_records_failure_and_reconciles_restart(client, app):
     assert not status["busy"] and status["run"]["state"] == "failed"
     app.state.store.execute("UPDATE chat_runs SET state='running' WHERE request_id='failure-visible'")
     with TestClient(create_app(app.state.store.root, TestRuntime()), base_url="http://localhost") as reloaded:
-        reloaded.get("/api/bootstrap")
+        login(reloaded)
         status = reloaded.get(path + "/execution").json()
         assert not status["busy"] and status["run"]["state"] == "interrupted"
 
