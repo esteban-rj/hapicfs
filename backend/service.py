@@ -310,6 +310,28 @@ class Service:
         finally:
             self.lock(agent_id).release()
 
+    def set_public_game(self, caller, agent_id, user_approved=False):
+        caller = self.agent(caller["id"])
+        if caller["kind"] != "hapic":
+            raise PermissionError("Solo Hapic puede elegir el juego público.")
+        if user_approved is not True:
+            raise ValueError("El usuario debe pedir qué juego queda en línea.")
+        target = self.agent(agent_id)
+        if target["project_id"] != caller["project_id"] or target["kind"] != "coder":
+            raise PermissionError("Elige un coder de este proyecto.")
+        if self.development.preview(target, "status").get("status") != "running":
+            raise ValueError("Ese juego no tiene una vista previa en marcha. No se cerró el enlace actual.")
+        closed = []
+        for other in self.store.all("SELECT * FROM agents WHERE project_id=? AND kind='coder' AND id!=?", (caller["project_id"], target["id"])):
+            current = self.development.share(other, "status")
+            if current.get("status") not in {None, "stopped"} or current.get("url"):
+                self.development.share(other, "stop")
+                closed.append(other["name"])
+        opened = self.development.share(target, "start", True)
+        self.store.set_setting("public-game-" + caller["project_id"], target["id"])
+        return {"agent_id": target["id"], "name": target["name"], "closed": closed, "url": opened.get("url"),
+                "http_status": opened.get("http_status"), "status": opened.get("status")}
+
     def tool(self, agent, name, args):
         agent = self.agent(agent["id"])
         project = self.project(agent["project_id"])
@@ -363,6 +385,8 @@ class Service:
             return load_template("ux")
         if name == "list_agent_templates":
             return {"templates": [load_template(kind) for kind in SPECIALISTS]}
+        if name == "set_public_game":
+            return self.set_public_game(agent, args.get("agent_id"), args.get("user_approved", False))
         if name == "restart_specialist_agent":
             if agent["kind"] != "hapic":
                 raise PermissionError("Solo Hapic puede recuperar especialistas.")

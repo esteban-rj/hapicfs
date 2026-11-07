@@ -2,6 +2,7 @@
 import asyncio
 import hashlib
 import json
+import re
 import threading
 
 TASK_TIMEOUT_SECONDS = 600
@@ -74,17 +75,66 @@ class Tasks:
             coordinator_id = group[0]['coordinator_id']
             if self.service.lock(coordinator_id).locked() or any(task['state'] in {'queued', 'running'} for task in group):
                 continue
-            signature = 'v2:' + hashlib.sha256(json.dumps([(task['id'], task['state'], task['updated_at']) for task in group]).encode()).hexdigest()
             delivered = sum(task['state'] == 'delivered' for task in group)
             problems = sum(task['state'] in {'failed', 'blocked'} for task in group)
             content = f"El equipo no tiene tareas en ejecución ni en cola.\nEntregas registradas: {delivered}.\nFallos o bloqueos en el historial: {problems}.\nLos avisos anteriores muestran qué entregó cada agente. Las entregas registradas no sustituyen la validación funcional."
-            for agent_id in {task['agent_id'] for task in group if task['agent_kind'] == 'coder' and task['state'] == 'delivered'}:
-                content += f"\n\nAbrir vista previa local actual: /api/agents/{agent_id}/preview/open\nEste enlace consulta el puerto actual; las URLs de entregas anteriores pueden haber cambiado."
+            delivered_lines = self.delivery_lines(group)
+            if delivered_lines:
+                content += "\n\nEntregas del proyecto:\n" + "\n".join(delivered_lines)
+            links = self.public_links(project_id)
+            for line in links:
+                content += "\n\n" + line
+            focus = self.store.setting("public-game-" + project_id)
+            signature = 'v4:' + hashlib.sha256(json.dumps([[(task['id'], task['state'], task['updated_at']) for task in group], focus, links]).encode()).hexdigest()
             with self.store.db() as db:
                 db.execute('BEGIN IMMEDIATE')
                 changed = db.execute('INSERT OR IGNORE INTO task_notifications(task_id,state) VALUES (?,?)', ('project:' + project_id, signature)).rowcount
                 if changed:
                     db.execute('INSERT INTO messages(agent_id,role,content,source,created_at) VALUES (?,?,?,?,?)', (coordinator_id, 'assistant', content, 'task-update', now()))
+
+    def delivery_lines(self, tasks):
+        """One line per delivered task so the idle summary covers the whole project."""
+        lines = []
+        for task in tasks:
+            if task["state"] != "delivered":
+                continue
+            try:
+                objective = " ".join(str(json.loads(task["contract"]).get("objective", "")).split())
+            except (ValueError, TypeError):
+                objective = ""
+            if not objective:
+                continue
+            if len(objective) > 160:
+                objective = objective[:157] + "..."
+            lines.append(f"- {task['agent_name']}: {objective}")
+        return lines
+
+    def public_links(self, project_id):
+        """The single public game, when one is selected, plus YouTube uploads. Never a local preview port."""
+        lines = []
+        focus = self.store.setting("public-game-" + project_id)
+        for agent in self.store.all("SELECT * FROM agents WHERE project_id=? ORDER BY created_at", (project_id,)):
+            if isinstance(focus, str) and agent["id"] != focus:
+                continue
+            saved = self.store.setting("development-share-" + agent["id"])
+            url = saved.get("url") if isinstance(saved, dict) else None
+            if not isinstance(url, str) or not url.startswith("https://"):
+                continue
+            play = url.rstrip("/")
+            if (self.store.agent_path(agent) / "workspace" / "pulso").is_dir():
+                play += "/pulso/"
+            else:
+                play += "/"
+            lines.append("Jugar: " + play)
+        if self.store.one("SELECT 1 FROM sqlite_master WHERE type='table' AND name='youtube_uploads'"):
+            seen = []
+            for row in self.store.all("SELECT video_id FROM youtube_uploads WHERE project_id=? AND status='uploaded' AND video_id IS NOT NULL ORDER BY updated_at", (project_id,)):
+                video_id = row["video_id"]
+                if video_id in seen or not re.fullmatch(r"[A-Za-z0-9_-]{11}", video_id or ""):
+                    continue
+                seen.append(video_id)
+                lines.append("YouTube: https://www.youtube.com/watch?v=" + video_id)
+        return lines
 
     def enqueue(self, caller, task_id):
         task = self.get(caller, task_id)

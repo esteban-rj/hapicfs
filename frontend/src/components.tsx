@@ -276,7 +276,12 @@ function MessageContent({ message, agent }: { message: Message; agent: Agent }) 
   return <>
     {readable ? <ReadableCopy value={readable} /> : pieces.map((piece, index) => {
       const match = piece.match(/^!\[([^\]]*)\]\(([^)]+)\)$/);
-      if (!match) return piece ? <p key={index}>{piece.split(/(https?:\/\/(?:127\.0\.0\.1|localhost):\d+(?:\/[^\s<>]*)?|\/api\/agents\/agt_[A-Za-z0-9]+\/preview\/open)/g).map((part, position) => /^(?:https?:\/\/(?:127\.0\.0\.1|localhost):\d+|\/api\/agents\/agt_[A-Za-z0-9]+\/preview\/open$)/.test(part) ? <a key={position} href={part.replace(/[.,;)]+$/, "")} target="_blank" rel="noreferrer">{part.startsWith("/api/") ? "Abrir vista previa" : part}</a> : part)}</p> : null;
+      if (!match) return piece ? <p key={index}>{piece.split(/(https?:\/\/(?:[a-z0-9-]+\.)*(?:lhr\.life|lhr\.rocks|localhost\.run|youtube\.com|youtu\.be)(?:\/[^\s<>)]*)?|https?:\/\/(?:127\.0\.0\.1|localhost):\d+(?:\/[^\s<>)]*)?|\/api\/agents\/agt_[A-Za-z0-9]+\/preview\/open)/g).map((part, position) => {
+        const href = part.replace(/[.,;)]+$/, "");
+        if (!/^(?:https?:\/\/(?:[a-z0-9-]+\.)*(?:lhr\.life|lhr\.rocks|localhost\.run|youtube\.com|youtu\.be)|https?:\/\/(?:127\.0\.0\.1|localhost):\d+|\/api\/agents\/agt_[A-Za-z0-9]+\/preview\/open)/.test(href)) return part;
+        const label = href.startsWith("/api/") ? "Abrir vista previa" : href;
+        return <a key={position} href={href} target="_blank" rel="noreferrer">{label}</a>;
+      })}</p> : null;
       const raw = match[2].replace(/^<|>$/g, "");
       if (/^(?:https?:|data:|javascript:|\/\/)/i.test(raw)) return <p key={index}>{match[1] || "Referencia de imagen externa"}</p>;
       const relative = raw.replace(/^\/workspace\//, "").replace(/^\.\//, "");
