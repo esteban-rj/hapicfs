@@ -57,6 +57,16 @@ La actividad usa la consulta existente al servidor: solo se anima un agente cuan
 
 Pruebas desde `frontend`: `pnpm test` comprueba aislamiento, distribución y estados. `pnpm test:office` construye la interfaz y prueba el flujo con FastAPI y SQLite temporales, sin credenciales de proveedores. Requiere las dependencias Python del proyecto y Chromium instalado mediante `pnpm exec playwright install chromium`; puedes indicar otro Python con `HAPIC_TEST_PYTHON` y un Chrome existente con `HAPIC_TEST_BROWSER`. Las capturas quedan en `artifacts/`.
 
+## Comunicación por voz
+
+Abre la conversación de cualquier agente y pulsa **Hablar**. Permite el micrófono, dicta una tarea o pregunta y pulsa **Terminar**; cada grabación admite hasta 60 segundos y 8 MB. Revisa o corrige la transcripción y pulsa **Enviar**. El mensaje se envía al mismo chat de Hermes, con su historial y modelo habituales. El agente debe estar conectado y libre para recibir tareas nuevas.
+
+Preguntas breves como **«¿cómo vas?»**, **«¿cuál es tu estado?»** o **«¿qué estás haciendo?»** se proponen como **Consulta de estado**. Puedes cambiar ese selector antes de enviar. El botón **Consultar estado** también funciona mientras el agente trabaja o sin una conexión de IA: consulta el runtime, los turnos y las tareas del servidor sin iniciar inferencia ni interrumpir el trabajo. En Hapic incluye el equipo; en los especialistas solo sus propias tareas. Los registros sin ejecución comprobada se indican como pendientes de revisión.
+
+**Leer respuestas** reproduce las respuestas a mensajes de voz y las consultas de estado usando la voz en español disponible en el navegador. Puedes detener la reproducción o pulsar **Escuchar respuesta** en el historial. Si el navegador no permite la lectura automática, utiliza el botón Escuchar.
+
+El micrófono necesita HTTPS o `localhost`, un navegador con `getUserMedia` y `MediaRecorder` que admita WebM o MP4, y la key de OpenAI configurada en el servidor. Una dirección HTTP privada de la red WiFi no habilita el micrófono; utiliza HTTPS para acceder desde otro dispositivo. Al cancelar o cambiar de agente se cierra el micrófono y se descarta la grabación pendiente. Al terminar, el audio se envía a OpenAI para transcripción mediante `gpt-transcribe` (configurable con `HAPIC_TRANSCRIPTION_MODEL`) y puede tener coste. Hapic no conserva archivos de audio; solo guarda en el chat el texto que envías. La lectura utiliza el servicio de voz del navegador o sistema operativo, que puede depender de su proveedor. Consulta la [guía oficial de transcripción](https://developers.openai.com/api/docs/guides/speech-to-text).
+
 ## Especialistas, planes e imágenes
 
 **Entorno de desarrollo** aparece en **Herramientas → Herramientas por agente**. Se habilita por defecto para coders nuevos y existentes (se conservan las desactivaciones explícitas) y puede asignarse a cualquier agente. Después de cambiar una asignación, reinicia el runtime para actualizar su lista MCP. Los scripts `start-docker.ps1` y `start-docker.sh` construyen `hapic-runner:local`; con Compose directo o servidor nativo, ejecuta antes `docker build -t hapic-runner:local -f runner/Dockerfile runner`.

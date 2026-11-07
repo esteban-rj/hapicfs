@@ -36,6 +36,10 @@ def digest(value):
     return hashlib.sha256(value.encode()).hexdigest()
 
 
+class YouTubeChannelRequired(ValueError):
+    """The Google account is authorized but has no YouTube channel to connect."""
+
+
 class OAuthAccessLogFilter(logging.Filter):
     """Authorization codes and state must never appear in Uvicorn access logs."""
     def filter(self, record):
@@ -146,8 +150,8 @@ class YouTube:
         self.project_access(project_id)
         config = self.client_config()
         redirect = self.redirect_uri(base_url)
-        if redirect not in config["redirect_uris"]:
-            raise ValueError("La dirección de retorno no coincide con el JSON. Registra la URI indicada en Herramientas en Google Cloud y vuelve a descargar el archivo; abre Hapic con esa misma dirección y puerto.")
+        # Google validates the current registered URIs; the downloaded JSON can be
+        # older than a Cloud Console update or a change to Docker's published port.
         state, verifier = secrets.token_urlsafe(40), secrets.token_urlsafe(48)
         challenge = base64.urlsafe_b64encode(hashlib.sha256(verifier.encode()).digest()).decode().rstrip("=")
         with self.store.db() as db:
@@ -219,6 +223,8 @@ class YouTube:
         if not isinstance(access, str) or not access or not set(SCOPES).issubset(scopes):
             raise ValueError("Concede los permisos de lectura del canal y Analytics para completar la conexión.")
         channels = self._api("channels", access, {"part": "snippet", "mine": "true"}).get("items", [])
+        if not channels:
+            raise YouTubeChannelRequired("Esta cuenta de Google todavía no tiene un canal de YouTube. Crea el canal en YouTube y vuelve a conectarlo en Hapic con esa misma cuenta.")
         if len(channels) != 1 or not re.fullmatch(r"UC[A-Za-z0-9_-]{22}", str(channels[0].get("id", ""))):
             raise ValueError("Google no devolvió un único canal. Vuelve a conectar con la cuenta propietaria y selecciona un canal concreto.")
         channel = channels[0]

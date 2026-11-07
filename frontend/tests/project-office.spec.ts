@@ -1,7 +1,11 @@
 import { test, expect, type Page } from "@playwright/test";
 
 async function setup(page: Page) {
-  const bootstrap = await page.request.get("/api/bootstrap");
+  const bootstrap = await page.request.post("/api/auth/login", { data: {
+    username: process.env.HAPIC_TEST_LOGIN_USERNAME || "office-test-user",
+    password: process.env.HAPIC_TEST_LOGIN_PASSWORD || "office-browser-test-password",
+  } });
+  expect(bootstrap.ok()).toBeTruthy();
   const { csrf } = await bootstrap.json();
   const create = async (url: string, data: object) => {
     const response = await page.request.post(url, { data, headers: { "X-Hapic-CSRF": csrf } });

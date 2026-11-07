@@ -68,7 +68,7 @@ class HeyGenDouble:
 
 
 @pytest.fixture
-def heygen_env(tmp_path, monkeypatch):
+def heygen_env(tmp_path, monkeypatch, login):
     monkeypatch.delenv("OPENAI_API_KEY", raising=False)
     monkeypatch.delenv("HAPIC_YOUTUBE_CLIENT_FILE", raising=False)
     application = create_app(tmp_path, OfflineRuntime())
@@ -79,7 +79,7 @@ def heygen_env(tmp_path, monkeypatch):
     project = service.create_project(org["id"], "Vídeos")
     agent = service.create_agent(project["id"], "Alma", "community-manager")
     with TestClient(application, base_url="http://localhost") as client:
-        client.headers["X-Hapic-CSRF"] = client.get("/api/bootstrap").json()["csrf"]
+        login(client)
         yield application, service, provider, client, project, agent
 
 

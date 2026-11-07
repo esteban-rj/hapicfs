@@ -18,12 +18,14 @@ from mcp.server.fastmcp import Context, FastMCP
 from mcp.server.transport_security import TransportSecuritySettings
 from pydantic import BaseModel, Field
 
+from .auth import Authentication, SESSION_SECONDS
 from .runtime import RuntimeUnavailable
 from .service import Service, safe_path
 from .storage import DEFAULT_MODEL, EFFORTS, ROOT, Store, now, uid
 from .templates import SPECIALISTS, template as load_template
 from .tool_catalog import CATALOG
-from .youtube import CALLBACK_PATH, OAuthAccessLogFilter
+from .youtube import CALLBACK_PATH, OAuthAccessLogFilter, YouTubeChannelRequired
+from .voice import AUDIO_TYPES, MAX_AUDIO_BYTES
 
 
 class NameInput(BaseModel):
@@ -59,8 +61,14 @@ class ToolInput(BaseModel):
     connection_id: str | None = Field(default=None, max_length=80)
 
 
+class LoginInput(BaseModel):
+    username: str = Field(min_length=1, max_length=80)
+    password: str = Field(min_length=1, max_length=256, repr=False)
+
+
 def create_app(data_dir: Path | None = None, runtime=None):
     store = Store(data_dir or Path(os.getenv("HAPIC_DATA_DIR", str(ROOT / ".hapic"))))
+    auth = Authentication(store)
     service = Service(store, runtime)
     access_logger = logging.getLogger("uvicorn.access")
     if not any(isinstance(item, OAuthAccessLogFilter) for item in access_logger.filters):
@@ -206,6 +214,7 @@ def create_app(data_dir: Path | None = None, runtime=None):
     app = FastAPI(title="Hapic", lifespan=lifespan, docs_url=None, redoc_url=None, openapi_url=None)
     app.state.service = service
     app.state.store = store
+    app.state.auth = auth
 
     @app.middleware("http")
     async def security(request: Request, call_next):
@@ -225,16 +234,19 @@ def create_app(data_dir: Path | None = None, runtime=None):
                 pass
             if host not in allowed_local:
                 return JSONResponse({"detail": "Esta versión solo permite acceso local o en la misma red privada."}, status_code=403)
-            if path.startswith("/api/") and path not in {"/api/bootstrap", "/api/health"}:
-                session = store.one("SELECT * FROM sessions WHERE token=?", (request.cookies.get("hapic_session", ""),))
-                if not session:
-                    return JSONResponse({"detail": "Abre la plataforma para iniciar una sesión local."}, status_code=401)
+            if path.startswith("/api/"):
                 if request.method not in {"GET", "HEAD", "OPTIONS"}:
                     origin = request.headers.get("origin")
-                    if origin and (urlparse(origin).netloc != request.headers.get("host") or urlparse(origin).scheme != request.url.scheme):
+                    if request.headers.get("sec-fetch-site") == "cross-site" or (origin and (urlparse(origin).netloc != request.headers.get("host") or urlparse(origin).scheme != request.url.scheme)):
                         return JSONResponse({"detail": "Origen no autorizado."}, status_code=403)
-                    if not secrets.compare_digest(request.headers.get("x-hapic-csrf", ""), session["csrf"]):
-                        return JSONResponse({"detail": "Sesión inválida. Recarga la página."}, status_code=403)
+                if path not in {"/api/auth/login", "/api/health"}:
+                    session = auth.session(request.cookies.get("hapic_session", ""))
+                    if not session:
+                        return JSONResponse({"detail": "Inicia sesión para acceder a la plataforma."}, status_code=401, headers={"Cache-Control": "no-store"})
+                    request.state.session = session
+                    if request.method not in {"GET", "HEAD", "OPTIONS"}:
+                        if not secrets.compare_digest(request.headers.get("x-hapic-csrf", ""), session["csrf"]):
+                            return JSONResponse({"detail": "Sesión inválida. Recarga la página."}, status_code=403)
         response = await call_next(request)
         response.headers["X-Content-Type-Options"] = "nosniff"
         response.headers["Referrer-Policy"] = "no-referrer"
@@ -270,14 +282,22 @@ def create_app(data_dir: Path | None = None, runtime=None):
         return {"status": "ok", "service": "hapic-control-plane"}
 
     @app.get("/api/bootstrap")
-    def bootstrap(request: Request, response: Response):
-        session = store.one("SELECT * FROM sessions WHERE token=?", (request.cookies.get("hapic_session", ""),))
-        if not session:
-            session = {"token": secrets.token_urlsafe(32), "csrf": secrets.token_urlsafe(32), "created_at": now()}
-            store.execute("INSERT INTO sessions VALUES (:token,:csrf,:created_at)", session)
+    def bootstrap(request: Request):
+        return auth.bootstrap(request.state.session)
+
+    @app.post("/api/auth/login")
+    def login(body: LoginInput, request: Request, response: Response):
+        session = auth.login(body.username, body.password, request.client.host if request.client else "unknown",
+                             request.cookies.get("hapic_session", ""))
         # Google returns via a cross-site top-level GET. Mutations still require CSRF and same-origin checks.
-        response.set_cookie("hapic_session", session["token"], httponly=True, samesite="lax", secure=request.url.scheme == "https", max_age=86400)
-        return {"csrf": session["csrf"], "user": {"id": "local-owner", "name": "Espacio local"}, "mode": "local"}
+        response.set_cookie("hapic_session", session["token"], httponly=True, samesite="lax", secure=request.url.scheme == "https", max_age=SESSION_SECONDS)
+        return auth.bootstrap(session)
+
+    @app.post("/api/auth/logout")
+    def logout(request: Request, response: Response):
+        auth.logout(request.cookies["hapic_session"])
+        response.delete_cookie("hapic_session", httponly=True, samesite="lax", secure=request.url.scheme == "https")
+        return {"logged_out": True}
 
     @app.get("/api/state")
     def state():
@@ -331,9 +351,11 @@ def create_app(data_dir: Path | None = None, runtime=None):
             result = service.youtube.finish(request.query_params.get("state", ""), request.query_params.get("code", ""),
                 request.cookies["hapic_session"], str(request.base_url), request.query_params.get("error"))
             query = {"youtube": "connected", "project_id": result["project_id"]}
-        except (ValueError, PermissionError, LookupError, RuntimeUnavailable):
+        except (ValueError, PermissionError, LookupError, RuntimeUnavailable) as exc:
             # Do not reflect provider error text, authorization codes, state, or tokens in the redirect.
             query = {"youtube": "error"}
+            if isinstance(exc, YouTubeChannelRequired):
+                query["youtube_error"] = "channel_required"
         return RedirectResponse("/?" + urlencode(query), status_code=303)
 
     @app.delete("/api/projects/{project_id}/connections/{connection_id}")
@@ -389,6 +411,27 @@ def create_app(data_dir: Path | None = None, runtime=None):
     @app.get("/api/agents/{agent_id}/execution")
     def execution(agent_id: str):
         return service.execution(agent_id)
+
+    @app.get("/api/agents/{agent_id}/voice/status")
+    def voice_status(agent_id: str):
+        return service.voice_status(agent_id)
+
+    @app.post("/api/agents/{agent_id}/voice/transcriptions")
+    async def transcribe_voice(agent_id: str, request: Request):
+        service.agent(agent_id)
+        key = store.api_key()
+        if not key:
+            raise RuntimeUnavailable("Configura la API key de OpenAI para usar el micrófono.")
+        content_type = request.headers.get("content-type", "")
+        if content_type.split(";", 1)[0].strip().lower() not in AUDIO_TYPES:
+            raise HTTPException(415, "Usa una grabación WebM, MP4 o WAV.")
+        data = bytearray()
+        async for chunk in request.stream():
+            if len(data) + len(chunk) > MAX_AUDIO_BYTES:
+                raise HTTPException(413, "La grabación debe pesar como máximo 8 MB.")
+            data.extend(chunk)
+        text = await service.voice.transcribe(key, bytes(data), content_type)
+        return {"text": text}
 
     @app.get("/api/agents/{agent_id}/preview/open")
     def open_preview(agent_id: str):

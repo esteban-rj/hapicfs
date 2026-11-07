@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { ModelSelect } from "./ModelSelect";
 import { ArtifactsPanel } from "./ArtifactsPanel";
+import { VoicePanel } from "./VoicePanel";
+import { useSpeechPlayback } from "./useSpeechPlayback";
 import {
   ChevronDown,
   ChevronRight,
@@ -14,6 +16,7 @@ import {
   Check,
   LockKeyhole,
   Image as ImageIcon,
+  Volume2,
 } from "lucide-react";
 import {
   api,
@@ -320,6 +323,7 @@ export function CreateAgentModal({ template, projects, agents, initialProjectId,
 export function Chat({
   agent,
   connected,
+  voiceConfigured,
   changed,
   onSettings,
   onPrepare,
@@ -327,6 +331,7 @@ export function Chat({
 }: {
   agent: Agent;
   connected: boolean;
+  voiceConfigured: boolean;
   changed: () => Promise<void>;
   onSettings: () => void;
   onPrepare: (kind: Template["kind"]) => void;
@@ -338,6 +343,8 @@ export function Chat({
   const [uploading, setUploading] = useState(false);
   const imageInput = useRef<HTMLInputElement>(null);
   const [busy, setBusy] = useState(false);
+  const sending = useRef(false);
+  const speech = useSpeechPlayback();
   const [execution, setExecution] = useState<{
     busy: boolean; provisioning: boolean; active_tasks: number; queued_tasks: number;
     run: { state: string; started_at: string; updated_at: string } | null;
@@ -396,44 +403,54 @@ export function Chat({
   useEffect(() => {
     bottom.current?.scrollIntoView({ behavior: "smooth", block: "nearest" });
   }, [messages, busy]);
-  async function send(e: React.FormEvent) {
-    e.preventDefault();
-    if ((!text.trim() && !attachments.length) || working || uploading || !execution || executionError) return;
+  async function sendMessage(input: string, sentAttachments: Attachment[], requestId: string, fromVoice = false) {
+    if (sending.current || working || uploading || !execution || executionError || !connected)
+      throw new Error("Espera a que el agente esté conectado y libre para enviarle una tarea. Puedes consultar su estado.");
+    sending.current = true;
     const draft = text;
-    const sentAttachments = attachments;
-    const input = text.trim() || "Describe y analiza las imágenes adjuntas.";
     setBusy(true);
     setError("");
     try {
       if (model !== agent.model || effort !== agent.effort)
         await put("/agents/" + agent.id + "/model", { model, effort });
-      setText("");
-      setAttachments([]);
+      if (!fromVoice) {
+        setText("");
+        setAttachments([]);
+      }
       setMessages((m) => [
         ...m,
-        { id: -Date.now(), role: "user", content: input, source: "user", attachments },
+        { id: -Date.now(), role: "user", content: input, source: "user", attachments: sentAttachments },
       ]);
-      await post("/agents/" + agent.id + "/chat", {
+      const reply = await post<{ content: string }>("/agents/" + agent.id + "/chat", {
         content: input,
-        request_id: crypto.randomUUID(),
-        image_ids: attachments.map((item) => item.id),
+        request_id: requestId,
+        image_ids: sentAttachments.map((item) => item.id),
       });
-      setMessages(await api("/agents/" + agent.id + "/messages"));
-      await changed();
+      const saved = await api<Message[]>("/agents/" + agent.id + "/messages").catch(() => null);
+      if (saved) setMessages(saved);
+      await changed().catch(() => undefined);
+      return reply.content;
     } catch (e) {
       setError((e as Error).message);
       const saved = await api<Message[]>("/agents/" + agent.id + "/messages").catch(() => null);
       if (saved) {
         setMessages(saved);
         const received = saved.some((message) => message.role === "user" && message.content === input && !messages.some((previous) => previous.id === message.id));
-        if (!received) {
+        if (!received && !fromVoice) {
           setText(draft);
           setAttachments(sentAttachments);
         }
       }
+      throw e;
     } finally {
+      sending.current = false;
       setBusy(false);
     }
+  }
+  function send(e: React.FormEvent) {
+    e.preventDefault();
+    if (!text.trim() && !attachments.length) return;
+    void sendMessage(text.trim() || "Describe y analiza las imágenes adjuntas.", attachments, crypto.randomUUID()).catch(() => undefined);
   }
   return (
     <section className="chat-shell">
@@ -522,6 +539,7 @@ export function Chat({
                 {m.role === "user" ? "Tú" : agent.name + (m.source === "artifact" ? " · Archivo guardado" : m.source === "task-update" ? " · Actividad del equipo" : " · Hermes")}
               </span>
               <MessageContent message={m} agent={agent} />
+              {m.role === "assistant" && m.source !== "artifact" && speech.supported ? <button type="button" className="text-button message-listen" onClick={() => speech.read(m.content, true)}><Volume2 size={13} /> Escuchar respuesta</button> : null}
             </div>
           </div>
         ))}
@@ -539,6 +557,8 @@ export function Chat({
         </div>
       ) : null}
       <ArtifactsPanel agent={agent} version={messages.length} />
+      <VoicePanel agent={agent} configured={voiceConfigured} canSend={connected && !working && !uploading && !!execution && !executionError}
+        onSend={(content, requestId) => sendMessage(content, [], requestId, true)} speech={speech} />
       <form className="composer" onSubmit={send}>
         <input ref={imageInput} type="file" accept="image/png,image/jpeg,image/webp" multiple hidden onChange={(e) => void attachImages(e.target.files)} />
         {attachments.length ? <div className="pending-images">
