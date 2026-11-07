@@ -1,0 +1,120 @@
+.office-dialog {
+  width: min(1480px, 96vw);
+  height: min(920px, 94dvh);
+  max-width: none;
+  max-height: none;
+  padding: 0;
+  border: 1px solid #d6d7ce;
+  border-radius: 14px;
+  background: #f7f6f0;
+  color: #253b35;
+  overflow: hidden;
+  box-shadow: 0 24px 100px #081b3159;
+}
+.office-dialog::backdrop { background: #10201ed1; backdrop-filter: blur(5px); }
+.office-dialog:fullscreen { width: 100vw; height: 100dvh; border: 0; border-radius: 0; }
+.office-header { height: 82px; display: flex; align-items: center; gap: 15px; padding: 0 25px; border-bottom: 1px solid #dddfd4; }
+.office-brand { width: 43px; height: 43px; display: grid; place-items: center; background: #e8ecdf; color: #456553; border: 1px solid #d9dfcf; border-radius: 12px; }
+.office-eyebrow { display: block; font-size: 9px; letter-spacing: 1.7px; font-weight: 650; line-height: 1.6; }
+.office-header h2 { margin: 2px 0 0; font-size: 20px; font-weight: 600; letter-spacing: -.5px; max-width: 48vw; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.office-project-tag { border-left: 1px solid #d5dacd; padding-left: 20px; margin-left: 12px; font-size: 11px; color: #778173; }
+.office-close { display: flex; align-items: center; justify-content: center; gap: 8px; margin-left: auto; padding: 9px 12px; border: 1px solid #d8ddd0; background: transparent; border-radius: 7px; font-size: 11px; color: #4b6152; white-space: nowrap; }
+.office-close:hover { background: #e8ecdf; }
+.office-body { display: grid; grid-template-columns: minmax(0, 1fr) 292px; height: calc(100% - 82px); }
+.office-stage { position: relative; min-width: 0; min-height: 0; overflow: hidden; background: #192b30; color: #e6e9dd; }
+.office-scene-heading { position: absolute; inset: 25px 28px auto; z-index: 2; pointer-events: none; }
+.office-scene-heading .office-eyebrow { color: #a8bba5; }
+.office-scene-heading h3 { margin: 6px 0; color: #eee9d7; font-size: clamp(20px, 2.25vw, 31px); font-weight: 450; letter-spacing: -.8px; }
+.office-scene-heading p { color: #9bb0ab; font-size: 11px; line-height: 1.7; margin: 0; }
+.office-viewport { position: absolute; inset: 78px 0 90px; overflow: hidden; }
+.office-viewport canvas { display: block; width: 100%; height: 100%; touch-action: none; }
+.office-world-label { position: absolute; z-index: 1; transform: translate(-50%, -100%); padding: 5px 9px; border: 1px solid #d6d4bf99; border-radius: 5px; background: #f6f1ddeb; color: #3f564b; font-size: 10px; line-height: 1.3; font-weight: 600; box-shadow: 0 3px 12px #0a1e2229; max-width: 115px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.office-world-label::before { content: ""; display: inline-block; margin-right: 5px; width: 5px; height: 5px; border-radius: 50%; background: #84938b; vertical-align: middle; }
+.office-world-label[data-tone="working"]::before { background: #3e895a; }
+.office-world-label[data-tone="waiting"]::before { background: #b6873c; }
+.office-world-label:hover, .office-world-label.selected { border-color: #d6bc77; background: #fff6d6; color: #314e3e; }
+.office-world-label[hidden] { display: none; }
+.office-scene-bottom { position: absolute; bottom: 61px; left: 26px; right: 26px; display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.office-scene-bottom p { margin: 0; color: #90a7a0; font-size: 10px; line-height: 1.7; }
+.office-camera { display: flex; align-items: center; gap: 2px; padding: 5px; border-radius: 9px; background: #284047; border: 1px solid #4a625e; box-shadow: 0 5px 18px #10232645; }
+.office-camera button { display: grid; place-items: center; width: 31px; height: 31px; padding: 0; background: transparent; border: 0; border-radius: 5px; color: #c3d0bc; }
+.office-camera button:hover, .office-camera button[aria-pressed="true"] { background: #496252; color: #fff5cf; }
+.office-camera > span { height: 18px; width: 1px; background: #547066; margin: 0 4px; }
+.office-scene-caption { position: absolute; inset: auto 0 0; height: 45px; padding: 0 25px; display: flex; align-items: center; gap: 8px; border-top: 1px solid #4a645b5e; color: #a9baac; font-size: 8px; letter-spacing: 1.5px; overflow: hidden; white-space: nowrap; }
+.office-scene-caption i { width: 5px; height: 5px; background: #d2bb82; border-radius: 50%; flex-shrink: 0; }
+.office-scene-caption > span { margin-left: auto; font-size: 10px; letter-spacing: 0; color: #90a99d; }
+.office-team { background: #f7f6f0; display: flex; flex-direction: column; min-height: 0; min-width: 0; border-left: 1px solid #d6dacd; }
+.office-team-heading { padding: 26px 22px 19px; border-bottom: 1px solid #e0e2d7; }
+.office-team-heading .office-eyebrow { color: #849078; }
+.office-team-heading h3 { display: flex; align-items: center; gap: 8px; margin: 8px 0 5px; font-size: 21px; letter-spacing: -.5px; font-weight: 500; }
+.office-team-heading h3 span { border: 1px solid #dce1d0; background: #e9eddf; border-radius: 5px; padding: 2px 6px; font-size: 10px; color: #708064; }
+.office-team-heading p { color: #8a9282; font-size: 11px; margin: 0; }
+.office-roster { overflow: auto; min-height: 90px; flex: 1; padding: 7px 10px; scrollbar-width: thin; }
+.office-member { width: 100%; display: flex; align-items: center; text-align: left; gap: 11px; padding: 12px 10px; border: 1px solid transparent; background: transparent; border-radius: 7px; color: #364e40; }
+.office-member:hover { background: #edefe4; }
+.office-member.selected { background: #e9eddf; border-color: #d6dcc7; }
+.office-member-avatar { width: 37px; height: 40px; border: 1px solid #253a3512; border-radius: 11px 11px 8px 8px; color: #29483ce0; font-size: 16px; display: grid; place-items: center; flex-shrink: 0; }
+.office-member > span:nth-child(2) { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.office-member strong { font-size: 12px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; }
+.office-member small { color: #85907f; font-size: 10px; }
+.office-member > svg { color: #94a088; margin-left: auto; }
+.office-presence { display: flex; align-items: center; gap: 5px; color: #7b8676; font-size: 9px; line-height: 1.5; }
+.office-presence i, .office-live-dot { width: 5px; height: 5px; background: #9ba197; border-radius: 50%; flex-shrink: 0; }
+.office-presence.working { color: #3a7950; }
+.office-presence.working i, .office-live-dot.connected { background: #5a9566; }
+.office-presence.waiting { color: #a0783e; }
+.office-presence.waiting i { background: #b9975f; }
+.office-agent-detail { flex-shrink: 0; margin: 12px 20px 16px; padding: 18px 15px; border: 1px solid #dce1d1; border-radius: 9px; background: #eff0e7; }
+.office-agent-detail > svg { color: #87977c; margin-bottom: 9px; }
+.office-agent-detail .office-eyebrow { font-size: 8px; letter-spacing: 1px; color: #7e8c73; }
+.office-agent-detail h3 { margin: 3px 0 8px; font-size: 15px; font-weight: 500; overflow-wrap: anywhere; }
+.office-agent-detail p { margin: 0; font-size: 11px; line-height: 1.75; color: #7c8973; max-height: 86px; overflow: auto; overflow-wrap: anywhere; }
+.office-chat-button { width: 100%; display: flex; align-items: center; justify-content: center; gap: 8px; margin-top: 14px; padding: 10px 7px; border: 1px solid #405d45; border-radius: 6px; background: #45664c; color: #f4f2dd; font-size: 11px; }
+.office-chat-button:hover { background: #35553c; }
+.office-team-footer { padding: 16px 21px; border-top: 1px solid #e0e2d7; color: #78866f; font-size: 9px; line-height: 1.8; }
+.office-live-dot { display: inline-block; margin-right: 6px; vertical-align: middle; }
+.office-team-footer small { display: block; font-size: 9px; color: #9aa18f; }
+.office-scene-error { position: absolute; z-index: 3; inset: 130px 8% 110px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 15px; text-align: center; background: #21373af2; border: 1px solid #6b8070; border-radius: 12px; padding: 24px; }
+.office-scene-error strong { font-size: 18px; font-weight: 500; }
+.office-scene-error p { max-width: 360px; color: #b1c0af; font-size: 12px; line-height: 1.8; }
+.office-scene-error span { color: #8fa58f; font-size: 10px; }
+.office-scene-error button { display: flex; align-items: center; gap: 7px; border: 1px solid #a9bb92; background: #dbe4c5; color: #2d4a37; border-radius: 6px; padding: 9px 16px; }
+.office-no-team { color: #809074; padding: 20px 12px; font-size: 12px; line-height: 1.8; }
+.office-dialog button:focus-visible { outline: 2px solid #b99a53; outline-offset: 3px; }
+@media (max-width: 1050px) {
+  .office-body { grid-template-columns: minmax(0, 1fr) 255px; }
+  .office-scene-bottom { flex-direction: column-reverse; align-items: center; bottom: 57px; }
+  .office-scene-bottom p { font-size: 9px; }
+  .office-project-tag { display: none; }
+  .office-scene-caption > span { display: none; }
+}
+@media (max-width: 700px) {
+  .office-dialog { width: 100vw; height: 100dvh; border-radius: 0; border: 0; }
+  .office-header { height: 70px; padding: 0 15px; gap: 10px; }
+  .office-header h2 { font-size: 17px; max-width: 61vw; }
+  .office-header .office-eyebrow { font-size: 8px; }
+  .office-close { padding: 8px; }
+  .office-close span { display: none; }
+  .office-brand { width: 35px; height: 37px; }
+  .office-body { height: calc(100% - 70px); display: flex; flex-direction: column; overflow: auto; }
+  .office-stage { height: 470px; min-height: 470px; flex-shrink: 0; }
+  .office-scene-heading { top: 20px; left: 20px; }
+  .office-scene-heading h3 { font-size: 25px; }
+  .office-scene-heading p { font-size: 10px; }
+  .office-viewport { inset: 85px 0 112px; }
+  .office-world-label { font-size: 8px; padding: 4px 6px; max-width: 90px; }
+  .office-scene-bottom { bottom: 55px; gap: 6px; }
+  .office-scene-caption { padding: 0 20px; font-size: 7px; }
+  .office-team { min-height: 330px; flex-shrink: 0; border-left: 0; }
+  .office-team-heading { padding: 20px 22px 15px; }
+  .office-roster { display: grid; grid-template-columns: 1fr 1fr; flex: none; max-height: 280px; padding: 10px; }
+  .office-member { gap: 8px; padding: 10px 6px; }
+  .office-member-avatar { width: 30px; height: 35px; font-size: 13px; }
+  .office-member > svg { display: none; }
+  .office-member strong { font-size: 11px; }
+  .office-member small, .office-presence { font-size: 8px; }
+  .office-agent-detail { margin: 5px 20px 18px; }
+  .office-scene-error { inset: 110px 20px 115px; padding: 15px; gap: 9px; }
+  .office-scene-error strong { font-size: 15px; }
+  .office-scene-error p { font-size: 10px; }
+}

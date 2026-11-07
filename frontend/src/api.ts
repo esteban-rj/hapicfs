@@ -11,10 +11,21 @@ export async function api<T = any>(
       ...options.headers,
     },
   });
-  const data = await response.json();
+  let data;
+  try {
+    data = await response.json();
+  } catch {
+    throw new Error(
+      response.status >= 500
+        ? "Ocurrió un error interno en el servidor. Recarga la página o vuelve a intentarlo."
+        : response.ok
+          ? "El servidor devolvió una respuesta no válida. Recarga la página."
+          : `No se pudo completar la solicitud (HTTP ${response.status}).`,
+    );
+  }
   if (!response.ok)
     throw new Error(
-      typeof data.detail === "string"
+      data && typeof data.detail === "string"
         ? data.detail
         : "No se pudo completar la solicitud. Revisa los campos.",
     );
