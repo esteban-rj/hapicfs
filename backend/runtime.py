@@ -19,6 +19,9 @@ def platform_instructions(agent, store=None):
     elif agent["kind"] == "community-manager":
         text = (ROOT / "templates/community-manager/SOUL.md").read_text(encoding="utf-8")
         text += " Estas instrucciones actuales de Community Manager prevalecen sobre instrucciones antiguas de tu perfil que nieguen generación de imágenes o pidan entregar JSON al usuario."
+    elif agent["kind"] in {"architect", "coder"}:
+        text = (ROOT / f"templates/{agent['kind']}/SOUL.md").read_text(encoding="utf-8")
+        text += " Estas instrucciones actuales prevalecen sobre reglas antiguas del perfil que elijan QR, código o enlace por defecto sin consultar al usuario."
     else:
         text = "Usa solo las herramientas autorizadas de Hapic. Los archivos persisten en /workspace. No inventes archivos, imágenes ni resultados de ejecución."
     if agent["kind"] in {"ux", "graphic-designer", "community-manager"}:
