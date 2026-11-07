@@ -93,7 +93,7 @@ export type FileNode = {
   children?: FileNode[];
   preview?: boolean;
   size?: number;
-  media_type?: "image" | "text";
+  media_type?: "image" | "video" | "text";
 };
 
 export const agentRoles: Record<Agent["kind"], string> = {
@@ -101,6 +101,9 @@ export const agentRoles: Record<Agent["kind"], string> = {
 };
 export function imageUrl(projectId: string, path: string, download = false) {
   return `/api/projects/${projectId}/image?path=${encodeURIComponent(path)}${download ? "&download=true" : ""}`;
+}
+export function videoUrl(projectId: string, path: string, download = false) {
+  return `/api/projects/${projectId}/video?path=${encodeURIComponent(path)}${download ? "&download=true" : ""}`;
 }
 export type Attachment = { id: string; path: string; name: string; url: string; mime_type: string };
 export type Message = { id: number; role: string; content: string; source: string; attachments?: Attachment[] };
@@ -110,7 +113,7 @@ export type IntegrationTool = {
   name: string;
   description: string;
   provider: string;
-  access: "read";
+  access: "read" | "generate" | "execute";
   requires_connection: boolean;
   actions: string[];
 };
@@ -139,3 +142,17 @@ export type YouTubeVideo = {
   statistics: Record<string, string>;
 };
 export type YouTubeVideos = { videos: YouTubeVideo[]; next_page_token: string | null; fetched_at: string };
+export type HeyGenVideo = {
+  id: string;
+  agent_id: string;
+  connection_id: string;
+  status: "submitting" | "submission_unknown" | "pending" | "processing" | "completed" | "failed" | "cancelled";
+  duration: number;
+  resolution: string;
+  aspect_ratio: string;
+  estimated_cost_usd: string;
+  saved: boolean;
+  path: string | null;
+  error: string | null;
+  created_at: string;
+};

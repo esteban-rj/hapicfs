@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useEffect, useState, useMemo } from "react";
 import { createRoot } from "react-dom/client";
 import {
   ArrowRight,
@@ -9,6 +9,7 @@ import {
   ChevronDown,
   ChevronRight,
   Clock3,
+  Code2,
   Database,
   FileText,
   Folder,
@@ -16,11 +17,18 @@ import {
   LayoutGrid,
   Layers,
   LoaderCircle,
+  Megaphone,
+  MessageSquareText,
+  Moon,
+  Palette,
+  PenTool,
   Plus,
   RefreshCw,
+  Search,
   Settings,
   ShieldCheck,
   Sparkles,
+  SunMedium,
   Wrench,
   X,
 } from "lucide-react";
@@ -31,6 +39,7 @@ import {
   put,
   agentRoles,
   imageUrl,
+  videoUrl,
   type Agent,
   type Capabilities,
   type FileNode,
@@ -48,10 +57,15 @@ import {
   Tree,
   CreateAgentModal,
   ImagePreview,
+  VideoPreview,
 } from "./components";
 import "./style.css";
 import { ModelSelect } from "./ModelSelect";
 import { ToolsPanel } from "./ToolsPanel";
+import { TeamDemo } from "./TeamDemo";
+
+type TeamTask = { id: string; agent_id: string; agent_name: string; objective: string; state: string; executing: boolean; latest_activity: string | null };
+type TeamExecution = { busy: boolean; active_tasks: number; queued_tasks: number; tasks?: TeamTask[]; busy_agents?: string[] };
 
 type Page =
   | "Resumen"
@@ -79,6 +93,7 @@ function App() {
   const [page, setPage] = useState<Page>("Resumen");
   const [error, setError] = useState("");
   const [toast, setToast] = useState("");
+  const [projectActivity, setProjectActivity] = useState<TeamExecution>();
   const [modal, setModal] = useState<"org" | "project" | null>(null);
   const [busy, setBusy] = useState(false);
   const [name, setName] = useState("");
@@ -88,16 +103,18 @@ function App() {
     path: string;
     content: string;
     size: number;
-    media_type?: "image" | "text";
+    media_type?: "image" | "video" | "text";
   }>();
   const [runtime, setRuntime] = useState<any>();
   const [events, setEvents] = useState<any[]>([]);
   const [tab, setTab] = useState<"Conversación" | "Archivos" | "Actividad">(
     "Conversación",
   );
+  const [expandedProjects, setExpandedProjects] = useState<Record<string, boolean>>({});
   const [model, setModel] = useState("gpt-6.1-sol");
   const [effort, setEffort] = useState("xhigh");
   const [key, setKey] = useState("");
+  const [darkMode, setDarkMode] = useState(false);
   const refresh = useCallback(async () => {
     const [s, c] = await Promise.all([
       api<State>("/state"),
@@ -156,6 +173,122 @@ function App() {
         (!projectId || a.project_id === projectId),
     ) || [];
   const agent = agents.find((a) => a.id === agentId);
+  const flowAgents = useMemo(() => {
+    if (!projectId || !state) return [];
+    return [...state.agents]
+      .filter((item) => item.project_id === projectId)
+      .sort((left, right) => {
+        const rank = (item: (typeof state.agents)[number]) => {
+          if (item.kind === "hapic") return 0;
+          if (item.kind === "architect") return 1;
+          if (item.kind === "coder") return 2;
+          if (item.kind === "ux") return 3;
+          if (item.kind === "graphic-designer") return 4;
+          if (item.kind === "community-manager") return 5;
+          return 6;
+        };
+        return rank(left) - rank(right);
+      });
+  }, [projectId, state]);
+  const createDemoAgent = useCallback(async () => {
+    if (busy) return;
+    const targetProjectId = projectId || projects[0]?.id;
+    if (!targetProjectId) {
+      newModal(org ? "project" : "org");
+      return;
+    }
+    setBusy(true);
+    setError("");
+    try {
+      const existing = state?.agents.find((item) => item.project_id === targetProjectId && item.kind === "ux" && item.name === "Agente de prueba");
+      const created = existing ?? await post<Agent>("/projects/" + targetProjectId + "/agents", {
+        name: "Agente de prueba",
+        template: "ux",
+      });
+      await refresh();
+      setProjectId(targetProjectId);
+      setAgentId(created.id);
+      setPage("Agentes");
+      setTab("Conversación");
+      setToast(existing ? "Agente de prueba cargado en el proyecto." : "Agente de prueba creado y cargado en el proyecto.");
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "No se pudo cargar el agente de prueba.");
+    } finally {
+      setBusy(false);
+    }
+  }, [org, projectId, projects, refresh, busy, state?.agents]);
+  const loadProject = useCallback(
+    (nextProjectId: string) => {
+      const nextProject = state?.projects.find((item) => item.id === nextProjectId);
+      if (!nextProject) return;
+      setOrgId(nextProject.organization_id);
+      setProjectId(nextProject.id);
+      const hapic = state?.agents.find(
+        (a) => a.project_id === nextProject.id && a.kind === "hapic",
+      );
+      setAgentId(hapic?.id || "");
+      setTab("Conversación");
+      setFile(undefined);
+      setPage("Agentes");
+      setToast("Proyecto cargado: " + nextProject.name);
+    },
+    [state],
+  );
+
+  const coordinator = state?.agents.find((item) => item.project_id === projectId && item.kind === "hapic");
+  useEffect(() => {
+    setProjectActivity(undefined);
+    if (!coordinator) return;
+    let active = true;
+    let previouslyWorking: boolean | undefined;
+    let timer: ReturnType<typeof setTimeout>;
+    const coordinatorId = coordinator.id;
+    async function poll() {
+      try {
+        const status = await api<TeamExecution>(`/agents/${coordinatorId}/execution`);
+        if (active) {
+          const working = status.busy || status.active_tasks > 0 || status.queued_tasks > 0;
+          if (previouslyWorking && !working) setToast("La ejecución del equipo terminó. Consulta las tareas en Hapic para revisar el resultado.");
+          previouslyWorking = working;
+          setProjectActivity({...status, busy_agents: status.busy ? [coordinatorId] : []});
+        }
+      } catch { /* The chat displays connection errors when opened. */ }
+      if (active) timer = setTimeout(poll, 3000);
+    }
+    void poll();
+    return () => { active = false; clearTimeout(timer); };
+  }, [coordinator?.id]);
+  const directoryCoordinators = state?.agents.filter(a => a.organization_id === orgId && a.kind === "hapic").map(a => a.id).join(",") || "";
+  useEffect(() => {
+    if (page !== "Agentes" || agentId || projectId || !directoryCoordinators) return;
+    let active = true;
+    let timer: ReturnType<typeof setTimeout>;
+    setProjectActivity(undefined);
+    async function pollDirectory() {
+      try {
+        const combined: TeamExecution = {busy: false, active_tasks: 0, queued_tasks: 0, tasks: [], busy_agents: []};
+        for (const id of directoryCoordinators.split(",")) {
+          if (!active) return;
+          const status = await api<TeamExecution>(`/agents/${id}/execution`);
+          combined.busy ||= status.busy;
+          combined.active_tasks += status.active_tasks;
+          combined.queued_tasks += status.queued_tasks;
+          combined.tasks!.push(...(status.tasks || []));
+          if (status.busy) combined.busy_agents!.push(id);
+        }
+        if (active) setProjectActivity(combined);
+      } catch { if (active) setProjectActivity(undefined); }
+      if (active) timer = setTimeout(pollDirectory, 6000);
+    }
+    void pollDirectory();
+    return () => { active = false; clearTimeout(timer); };
+  }, [directoryCoordinators, page, projectId, agentId]);
+  const toggleProject = useCallback((projectIdToToggle: string, expanded: boolean) => {
+    setExpandedProjects((current) => ({
+      ...current,
+      [projectIdToToggle]: !expanded,
+    }));
+  }, []);
   useEffect(() => {
     if (projectId && !projects.some((p) => p.id === projectId)) {
       setProjectId("");
@@ -285,8 +418,8 @@ function App() {
     });
   }
   async function readFile(n: FileNode) {
-    if (n.media_type === "image") {
-      setFile({ path: n.path, content: "", size: n.size || 0, media_type: "image" });
+    if (n.media_type === "image" || n.media_type === "video") {
+      setFile({ path: n.path, content: "", size: n.size || 0, media_type: n.media_type });
       return;
     }
     await action(async () =>
@@ -313,8 +446,26 @@ function App() {
       : page === "Resumen"
         ? "Tu equipo, ampliado."
         : page;
+  const agentIcon = (kind: Agent["kind"]) => {
+    switch (kind) {
+      case "hapic":
+        return <Mark small />;
+      case "ux":
+        return <PenTool size={12} />;
+      case "graphic-designer":
+        return <Palette size={12} />;
+      case "architect":
+        return <LayoutGrid size={12} />;
+      case "coder":
+        return <Code2 size={12} />;
+      case "community-manager":
+        return <Megaphone size={12} />;
+      default:
+        return <Sparkles size={12} />;
+    }
+  };
   return (
-    <>
+    <div className={darkMode ? "theme-dark" : "theme-light"}>
       <header className="topbar">
         <a
           className="brand"
@@ -367,6 +518,14 @@ function App() {
           <i />
           Local
         </span>
+        <button
+          className="icon-button theme-toggle"
+          aria-label="Cambiar tema"
+          onClick={() => setDarkMode((value) => !value)}
+          title="Cambiar tema"
+        >
+          {darkMode ? <SunMedium size={15} /> : <Moon size={15} />}
+        </button>
         <div className="avatar" title="Operador local">
           Tú
         </div>
@@ -379,6 +538,7 @@ function App() {
               className={page === n ? "active" : ""}
               onClick={() => {
                 setPage(n);
+                setAgentId("");
                 if (n !== "Agentes") {
                   setAgentId("");
                   if (n !== "Herramientas") setProjectId("");
@@ -402,38 +562,43 @@ function App() {
               <Plus size={14} />
             </button>
           </div>
-          {projects.length ? (
-            projects.map((p) => (
-              <div key={p.id}>
-                <button
-                  className={
-                    "project-nav " + (projectId === p.id ? "current" : "")
-                  }
-                  onClick={() => openProject(p)}
-                >
-                  <Folder size={15} />
-                  <span>{p.name}</span>
-                </button>
-                {projectId === p.id
-                  ? state?.agents
-                      .filter((a) => a.project_id === p.id)
-                      .map((a) => (
-                        <button
-                          className={
-                            "agent-nav " + (a.id === agentId ? "current" : "")
-                          }
-                          key={a.id}
-                          onClick={() => openAgent(a)}
-                        >
-                          <span>
-                            {a.kind === "hapic" ? "H" : a.name[0].toUpperCase()}
-                          </span>
-                          {a.name}
-                        </button>
-                      ))
-                  : null}
-              </div>
-            ))
+          {projects.length > 0 ? (
+            projects.map((p) => {
+              const projectAgents = state?.agents.filter((a) => a.project_id === p.id) || [];
+              const isExpanded = expandedProjects[p.id] ?? projectId === p.id;
+              return (
+                <div key={p.id} className="project-group">
+                  <div className="project-nav-row">
+                    <button className="project-disclosure icon-button" aria-label={(isExpanded ? "Contraer " : "Expandir ") + p.name} aria-expanded={isExpanded} onClick={() => toggleProject(p.id, isExpanded)}>
+                      {isExpanded ? <ChevronDown size={13} /> : <ChevronRight size={13} />}
+                    </button>
+                    <button className={"project-nav " + (projectId === p.id ? "current" : "")} onClick={() => openProject(p)}>
+                      <Folder size={15} /><span>{p.name}</span><small>{projectAgents.length}</small>
+                    </button>
+                  </div>
+                  {isExpanded ? (
+                    <div className="agent-submenu">
+                      {projectAgents.length ? (
+                        projectAgents.map((a) => (
+                          <button
+                            className={"agent-nav " + (a.id === agentId ? "current" : "")}
+                            key={a.id}
+                            onClick={() => openAgent(a)}
+                          >
+                            <span className="agent-icon">
+                              {agentIcon(a.kind)}
+                            </span>
+                            {a.name}
+                          </button>
+                        ))
+                      ) : (
+                        <div className="agent-empty">Sin agentes</div>
+                      )}
+                    </div>
+                  ) : null}
+                </div>
+              );
+            })
           ) : (
             <p className="tiny muted">Tus proyectos aparecerán aquí.</p>
           )}
@@ -481,6 +646,41 @@ function App() {
             </p>
           </div>
           <div className="page-actions">
+            {(page === "Resumen" || page === "Agentes") && (
+              <>
+                {projects.length ? (
+                  <select
+                    className="project-loader-select"
+                    value={projectId || ""}
+                    onChange={(e) => {
+                      if (e.target.value) {
+                        loadProject(e.target.value);
+                      }
+                    }}
+                    aria-label="Proyecto cargado"
+                  >
+                    <option value="">Selecciona un proyecto</option>
+                    {projects.map((item) => (
+                      <option key={item.id} value={item.id}>
+                        {item.name}
+                      </option>
+                    ))}
+                  </select>
+                ) : null}
+                <button
+                  className="secondary"
+                  disabled={busy}
+                  onClick={() =>
+                    projectId || projects[0]
+                      ? createDemoAgent()
+                      : newModal(org ? "project" : "org")
+                  }
+                >
+                  <Sparkles size={15} />
+                  Agente de prueba
+                </button>
+              </>
+            )}
             {page === "Resumen" || page === "Proyectos" ? (
               <button
                 className="primary"
@@ -505,6 +705,11 @@ function App() {
             ) : null}
           </div>
         </div>
+        {projectActivity && (projectActivity.busy || projectActivity.active_tasks > 0 || projectActivity.queued_tasks > 0) ? <div className="execution-status" role="status">
+          <LoaderCircle className="spin" size={16} />
+          <strong>Hapic y su equipo están trabajando · {projectActivity.active_tasks} en ejecución · {projectActivity.queued_tasks} en cola.</strong>
+          <button className="text-button" onClick={() => { if (coordinator) { setAgentId(coordinator.id); setPage("Agentes"); setTab("Conversación"); } }}>Ver tareas</button>
+        </div> : null}
         {error ? (
           <div className="error-banner" role="alert">
             <span>{error}</span>
@@ -769,6 +974,7 @@ function App() {
             {page === "Agentes" ? (
               agent ? (
                 <>
+                  <button className="text-button team-back" onClick={() => setAgentId("")}><ChevronRight size={14} /> Volver al equipo</button>
                   <div className="tabs">
                     {(["Conversación", "Archivos", "Actividad"] as const).map(
                       (t) => (
@@ -811,6 +1017,37 @@ function App() {
                         )}
                         {agent.planner_id ? <div className="card compact-card"><h3>Arquitecto vinculado</h3><p>{state.agents.find((a) => a.id === agent.planner_id)?.name}</p><p>Lee su plan publicado antes de escribir código.</p></div> : null}
                         <button className="secondary" onClick={() => setPage("Plantillas")}><Plus size={15} /> Añadir especialista</button>
+                        <div className="card flow-card">
+                          <div className="card-title">
+                            <Layers size={17} />
+                            Flujo de agentes
+                          </div>
+                          <div className="flow-list">
+                            {flowAgents.length ? (
+                              flowAgents.map((item, index) => (
+                                <div key={item.id} className="flow-item">
+                                  <div className="flow-connector">
+                                    {index < flowAgents.length - 1 ? <span /> : null}
+                                  </div>
+                                  <button
+                                    className={"flow-node " + (item.id === agentId ? "active" : "")}
+                                    onClick={() => openAgent(item)}
+                                  >
+                                    <span className="agent-letter small-letter">
+                                      {item.kind === "hapic" ? "H" : item.name[0].toUpperCase()}
+                                    </span>
+                                    <div>
+                                      <strong>{item.name}</strong>
+                                      <small>{agentRoles[item.kind]}</small>
+                                    </div>
+                                  </button>
+                                </div>
+                              ))
+                            ) : (
+                              <p className="muted flow-empty">Sin agentes en este proyecto aún.</p>
+                            )}
+                          </div>
+                        </div>
                         <RuntimeCard agent={agent} runtime={runtime} />
                       </div>
                     </div>
@@ -860,7 +1097,7 @@ function App() {
                           ) : null}
                         </div>
                         {file ? (
-                          file.media_type === "image" ? <ImagePreview key={file.path} src={imageUrl(projectId, file.path)} alt={file.path.split("/").pop() || "Imagen del proyecto"} download={imageUrl(projectId, file.path, true)} /> : <pre>{file.content}</pre>
+                          file.media_type === "video" ? <VideoPreview key={file.path} src={videoUrl(projectId, file.path)} name={file.path.split("/").pop() || "Vídeo del proyecto"} download={videoUrl(projectId, file.path, true)} /> : file.media_type === "image" ? <ImagePreview key={file.path} src={imageUrl(projectId, file.path)} alt={file.path.split("/").pop() || "Imagen del proyecto"} download={imageUrl(projectId, file.path, true)} /> : <pre>{file.content}</pre>
                         ) : (
                           <Empty
                             icon={<FileText size={28} />}
@@ -900,11 +1137,26 @@ function App() {
                   )}
                 </>
               ) : (
-                <AgentTable
-                  agents={agents}
-                  projects={projects}
-                  open={openAgent}
-                />
+                <>
+                  <section className="team-hero" aria-labelledby="team-title">
+                    <div><span className="eyebrow">PERSONAS + AGENTES</span><h2 id="team-title">Una idea. Todo tu equipo.</h2><p>Hapic coordina. Cada especialista aporta lo suyo. Aquí ves quién está en tu proyecto y en qué está trabajando.</p></div>
+                    <button className="primary" onClick={() => coordinator ? openAgent(coordinator) : agents.find(a => a.kind === "hapic") ? openAgent(agents.find(a => a.kind === "hapic")!) : newModal(org ? "project" : "org")}><Sparkles size={16} /> {agents.length ? "Hablar con Hapic" : "Crear mi equipo"}<ArrowUpRight size={16} /></button>
+                  </section>
+                  <div className="team-metrics">
+                    <div><Sparkles size={18} /><strong>{agents.length}</strong><span>Agentes en tu equipo</span></div>
+                    <div><Clock3 size={18} /><strong>{projectActivity ? projectActivity.active_tasks + (projectActivity.busy_agents?.length ?? (projectActivity.busy ? 1 : 0)) : "—"}</strong><span>{project ? "Ejecuciones en este proyecto" : "Ejecuciones en tus proyectos"}</span></div>
+                    <div><Layers size={18} /><strong>{projectActivity?.queued_tasks ?? "—"}</strong><span>Tareas en espera</span></div>
+                  </div>
+                  <div className="team-workspace">
+                    <div className="team-directory">
+                      <div className="section-heading"><div><h2>Tu equipo <span className="count">{agents.length}</span></h2><p className="muted tiny">Roles, tareas y acceso a cada conversación.</p></div>
+                        <select className="team-project-filter" aria-label="Filtrar equipo por proyecto" value={projectId} onChange={e => setProjectId(e.target.value)}><option value="">Todos los proyectos</option>{projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}</select>
+                      </div>
+                      <AgentTable agents={agents} projects={projects} open={openAgent} execution={projectActivity} />
+                    </div>
+                    <TeamDemo onStart={() => { const hapic = coordinator || agents.find(a => a.kind === "hapic"); if (hapic) openAgent(hapic); else newModal(org ? "project" : "org"); }} hasTeam={agents.length > 0} />
+                  </div>
+                </>
               )
             ) : null}
             {page === "Plantillas" && templates.length ? (
@@ -1250,7 +1502,7 @@ function App() {
           </form>
         </Modal>
       ) : null}
-    </>
+    </div>
   );
 }
 function ProjectCard({
@@ -1290,12 +1542,18 @@ function AgentTable({
   agents,
   projects,
   open,
+  execution,
 }: {
   agents: Agent[];
   projects: Project[];
   open: (a: Agent) => void;
+  execution?: TeamExecution;
 }) {
+  const [query, setQuery] = useState("");
+  const filtered = agents.filter(a => `${a.name} ${agentRoles[a.kind]} ${projects.find(p => p.id === a.project_id)?.name || ""}`.toLocaleLowerCase("es").includes(query.toLocaleLowerCase("es")));
   return agents.length ? (
+    <section className="agents-table" aria-label="Directorio de agentes">
+    <div className="team-table-toolbar"><label className="team-search"><Search size={16} /><input aria-label="Buscar agente, rol o proyecto" placeholder="Buscar por nombre o rol…" value={query} onChange={e => setQuery(e.target.value)} /></label><span className="tiny muted">{filtered.length} de {agents.length}</span></div>
     <div className="card table-scroll">
       <table>
         <thead>
@@ -1303,14 +1561,17 @@ function AgentTable({
             <th>Agente</th>
             <th>Proyecto</th>
             <th>Modelo</th>
-            <th>Estado registrado</th>
+            <th>Trabajo y estado</th>
             <th>
               <span className="sr-only">Abrir</span>
             </th>
           </tr>
         </thead>
         <tbody>
-          {agents.map((a) => (
+          {filtered.map((a) => {
+            const tasks = execution?.tasks?.filter(task => task.agent_id === a.id) || [];
+            const task = tasks.find(task => task.executing) || tasks.find(task => task.state === "queued") || tasks[tasks.length - 1];
+            return (
             <tr key={a.id} onClick={() => open(a)}>
               <td>
                 <button
@@ -1328,25 +1589,29 @@ function AgentTable({
                     <small>
                       {agentRoles[a.kind]}
                     </small>
+                    <small className="table-model-summary">{a.model} · {a.effort}</small>
                   </span>
                 </button>
               </td>
-              <td>{projects.find((p) => p.id === a.project_id)?.name}</td>
-              <td>
+              <td data-label="Proyecto">{projects.find((p) => p.id === a.project_id)?.name}</td>
+              <td data-label="Modelo">
                 <code>{a.model}</code>
                 <small>{a.effort}</small>
               </td>
               <td>
+                {task ? <div className="table-task"><span className={"team-task-status " + (task.executing ? "active" : task.state)}>{task.executing ? "En curso" : ({ queued: "En cola", delivered: "Entregada", completed: "Entregada", failed: "Fallida", blocked: "Bloqueada", running: "Sin ejecución confirmada" }[task.state] || task.state)}</span><span title={task.objective}>{task.objective}</span>{task.latest_activity && <small title={task.latest_activity}>{task.latest_activity}</small>}</div> : <div className="table-task">{a.kind === "hapic" && execution?.busy_agents?.includes(a.id) ? <span className="team-task-status active">Coordinando el equipo</span> : <span className="muted tiny">{execution ? "Sin tarea asignada" : "Abre el agente para ver su actividad"}</span>}</div>}
                 <Badge status={a.status} />
               </td>
               <td>
-                <ChevronRight size={15} />
+                <button className="icon-button" aria-label={"Abrir conversación de " + a.name} onClick={e => { e.stopPropagation(); open(a); }}><ArrowUpRight size={16} /></button>
               </td>
             </tr>
-          ))}
+          );})}
         </tbody>
       </table>
+      {!filtered.length && <p className="team-no-results">No hay coincidencias. Prueba con otro nombre o rol.</p>}
     </div>
+    </section>
   ) : (
     <Empty icon={<Sparkles size={27} />} title="Tu equipo empieza con Hapic">
       Crea un proyecto para preparar tu orquestador y sumar especialistas.

@@ -28,6 +28,7 @@ flowchart LR
 | Plantillas | Comportamiento y método revisables, sin estado privado | `templates/` |
 | Herramientas | Catálogo de integraciones y permisos efectivos por agente | `backend/tool_catalog.py` |
 | YouTube | OAuth de Google, tokens cifrados y consultas limitadas al canal asignado | `backend/youtube.py` |
+| HeyGen | Claves cifradas por proyecto, trabajos idempotentes y MP4 persistentes | `backend/heygen.py` |
 
 FastAPI sirve el build de Vite en producción. En desarrollo, Vite reenvía `/api` al backend. El chat actual espera una respuesta completa del servidor; la interfaz no implementa streaming de tokens.
 
@@ -83,6 +84,12 @@ El arquitecto publica en `workspace/plans/<architect-id>/plan.md` del proyecto. 
 `backend/images.py` llama a `/v1/images/generations` con la credencial del servidor. Decodifica base64 y valida PNG y tamaño. La herramienta escribe atómicamente en el workspace antes de registrar un mensaje de archivo y una fila `images`. Ese mensaje se conserva si después falla Hermes. La UI carga los bytes desde una ruta autenticada del mismo origen y permite descargar; no guarda base64 en SQLite ni solicita URLs arbitrarias del proveedor.
 
 Las instrucciones de integración actualizadas se envían en `instructions` de cada petición Responses, sin sobrescribir el `SOUL.md` ni memorias existentes. La lista de herramientas de un runtime existente se actualiza al recrearlo.
+
+### Vídeos
+
+El catálogo también permite asignar [HeyGen](heygen.md) a cualquier agente; Community Manager lo incluye inicialmente. La conexión y la clave pertenecen al proyecto. El servidor verifica cuenta y permisos, conserva la clave cifrada fuera de los contenedores y comprueba cada asignación al ejecutar herramientas.
+
+`video_jobs` registra las solicitudes antes de enviarlas a la API v3 con una clave de idempotencia estable. Las consultas recuperan el estado y descargan el MP4 desde un dominio de HeyGen sin redirecciones ni credenciales. El archivo se escribe atómicamente en `agents/<id>/workspace/videos/` y después se adjunta al chat. La reproducción y descarga usan una ruta local autenticada con comprobación de firma y pertenencia; no dependen del enlace firmado remoto. Un fallo de descarga permite consultar el mismo trabajo sin volver a generar.
 
 ## Confianza y alcance
 
