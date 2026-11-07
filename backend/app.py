@@ -143,6 +143,11 @@ def create_app(data_dir: Path | None = None, runtime=None):
         return service.tool(scope(ctx), "generate_project_image", {"prompt": prompt, "size": size})
 
     @mcp.tool()
+    def set_public_game(agent_id: str, ctx: Context, user_approved: bool = False) -> dict:
+        """Hapic deja UN solo juego en línea. agent_id es el coder cuya vista previa ya está en marcha. user_approved=true solo si el usuario pidió ese juego. Cierra los otros túneles del proyecto y abre el de ese coder. No crea otro contenedor ni otra vista previa."""
+        return service.tool(scope(ctx), "set_public_game", {"agent_id": agent_id, "user_approved": user_approved})
+
+    @mcp.tool()
     def restart_specialist_agent(agent_id: str, ctx: Context) -> dict:
         """Hapic recupera el runtime de un especialista inactivo de ESTE proyecto, preservando archivos, plan y vista previa. Úsalo antes de recuperar una tarea que agotó tiempo, para detener el turno remoto anterior; nunca reinicies un agente con turno/provisión activo. No reintenta tareas, no genera medios ni administra otros proyectos."""
         return service.tool(scope(ctx), "restart_specialist_agent", {"agent_id": agent_id})

@@ -75,22 +75,47 @@ class Tasks:
             coordinator_id = group[0]['coordinator_id']
             if self.service.lock(coordinator_id).locked() or any(task['state'] in {'queued', 'running'} for task in group):
                 continue
-            signature = 'v3:' + hashlib.sha256(json.dumps([(task['id'], task['state'], task['updated_at']) for task in group]).encode()).hexdigest()
             delivered = sum(task['state'] == 'delivered' for task in group)
             problems = sum(task['state'] in {'failed', 'blocked'} for task in group)
             content = f"El equipo no tiene tareas en ejecución ni en cola.\nEntregas registradas: {delivered}.\nFallos o bloqueos en el historial: {problems}.\nLos avisos anteriores muestran qué entregó cada agente. Las entregas registradas no sustituyen la validación funcional."
-            for line in self.public_links(project_id):
+            delivered_lines = self.delivery_lines(group)
+            if delivered_lines:
+                content += "\n\nEntregas del proyecto:\n" + "\n".join(delivered_lines)
+            links = self.public_links(project_id)
+            for line in links:
                 content += "\n\n" + line
+            focus = self.store.setting("public-game-" + project_id)
+            signature = 'v4:' + hashlib.sha256(json.dumps([[(task['id'], task['state'], task['updated_at']) for task in group], focus, links]).encode()).hexdigest()
             with self.store.db() as db:
                 db.execute('BEGIN IMMEDIATE')
                 changed = db.execute('INSERT OR IGNORE INTO task_notifications(task_id,state) VALUES (?,?)', ('project:' + project_id, signature)).rowcount
                 if changed:
                     db.execute('INSERT INTO messages(agent_id,role,content,source,created_at) VALUES (?,?,?,?,?)', (coordinator_id, 'assistant', content, 'task-update', now()))
 
-    def public_links(self, project_id):
-        """Public tunnel and YouTube addresses for this project. Never a local preview port."""
+    def delivery_lines(self, tasks):
+        """One line per delivered task so the idle summary covers the whole project."""
         lines = []
+        for task in tasks:
+            if task["state"] != "delivered":
+                continue
+            try:
+                objective = " ".join(str(json.loads(task["contract"]).get("objective", "")).split())
+            except (ValueError, TypeError):
+                objective = ""
+            if not objective:
+                continue
+            if len(objective) > 160:
+                objective = objective[:157] + "..."
+            lines.append(f"- {task['agent_name']}: {objective}")
+        return lines
+
+    def public_links(self, project_id):
+        """The single public game, when one is selected, plus YouTube uploads. Never a local preview port."""
+        lines = []
+        focus = self.store.setting("public-game-" + project_id)
         for agent in self.store.all("SELECT * FROM agents WHERE project_id=? ORDER BY created_at", (project_id,)):
+            if isinstance(focus, str) and agent["id"] != focus:
+                continue
             saved = self.store.setting("development-share-" + agent["id"])
             url = saved.get("url") if isinstance(saved, dict) else None
             if not isinstance(url, str) or not url.startswith("https://"):

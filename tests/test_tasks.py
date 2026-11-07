@@ -288,7 +288,39 @@ def test_idle_summary_links_the_public_tunnel_and_youtube(tmp_path):
     asyncio.run(service.tasks.run(hapic, task['id']))
     service.tasks.publish_updates()
     content = service.messages(hapic['id'])[-1]['content']
+    assert 'UX: Cerrar' in content
     assert 'https://game.lhr.life/pulso/' in content
     assert 'https://www.youtube.com/watch?v=7_8-I4pIec4' in content
     assert 'preview/open' not in content
     assert '127.0.0.1' not in content
+
+
+def test_hapic_switches_the_only_public_game(tmp_path, monkeypatch):
+    service, hapic, ux, runtime = setup(tmp_path)
+    architect = service.create_agent(hapic['project_id'], 'Arqui', 'architect')
+    pulso = service.create_agent(hapic['project_id'], 'Pulso Código', 'coder', architect['id'])
+    brayan = service.create_agent(hapic['project_id'], 'El Brayan', 'coder', architect['id'])
+
+    def share(agent, action='status', user_approved=False):
+        if action == 'stop':
+            return {'status': 'stopped', 'url': None}
+        if action == 'status':
+            return {'status': 'running', 'url': 'https://pulso.lhr.life'} if agent['id'] == pulso['id'] else {'status': 'stopped', 'url': None}
+        return {'status': 'running', 'url': 'https://rbr.lhr.life', 'http_status': 200}
+
+    monkeypatch.setattr(service.development, 'share', share)
+    monkeypatch.setattr(service.development, 'preview', lambda agent, action, command='': {'status': 'running'})
+    with pytest.raises(ValueError):
+        service.tool(hapic, 'set_public_game', {'agent_id': brayan['id'], 'user_approved': False})
+    result = service.tool(hapic, 'set_public_game', {'agent_id': brayan['id'], 'user_approved': True})
+    assert result['url'] == 'https://rbr.lhr.life' and result['closed'] == ['Pulso Código']
+    service.store.set_setting('development-share-' + pulso['id'], {'url': 'https://pulso.lhr.life'})
+    service.store.set_setting('development-share-' + brayan['id'], {'url': 'https://rbr.lhr.life'})
+    (service.store.agent_path(pulso) / 'workspace' / 'pulso').mkdir(parents=True)
+    task = service.tasks.create(hapic, ux['id'], 'Publicar la publicidad de RBR', '', [], ['index.html'])
+    service.store.execute("UPDATE tasks SET state='delivered',result='{}' WHERE id=?", (task['id'],))
+    service.tasks.publish_updates()
+    content = service.messages(hapic['id'])[-1]['content']
+    assert 'Publicar la publicidad de RBR' in content
+    assert 'https://rbr.lhr.life/' in content
+    assert 'pulso.lhr.life' not in content
