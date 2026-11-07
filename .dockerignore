@@ -9,3 +9,5 @@ frontend/dist
 .pytest_cache
 docs/mockups
 artifacts
+client_secret*.json
+**/client_secret*.json

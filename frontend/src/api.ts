@@ -104,3 +104,38 @@ export function imageUrl(projectId: string, path: string, download = false) {
 }
 export type Attachment = { id: string; path: string; name: string; url: string; mime_type: string };
 export type Message = { id: number; role: string; content: string; source: string; attachments?: Attachment[] };
+
+export type IntegrationTool = {
+  id: string;
+  name: string;
+  description: string;
+  provider: string;
+  access: "read";
+  requires_connection: boolean;
+  actions: string[];
+};
+export type Connection = {
+  id: string;
+  project_id: string;
+  provider: string;
+  account_id: string;
+  account_name: string;
+  scopes: string[];
+  status: "connected" | "reauthorization_required";
+};
+export type ToolAssignment = {
+  agent_id: string;
+  tool_id: string;
+  enabled: number;
+  connection_id: string | null;
+};
+export type ProjectTools = { connections: Connection[]; assignments: ToolAssignment[] };
+export type YouTubeSettings = { configured: boolean; source: "file" | "server" | "none"; redirect_uri: string; scopes: string[]; message?: string };
+export type YouTubeVideo = {
+  id: string;
+  title: string;
+  published_at: string | null;
+  privacy_status: string;
+  statistics: Record<string, string>;
+};
+export type YouTubeVideos = { videos: YouTubeVideo[]; next_page_token: string | null; fetched_at: string };

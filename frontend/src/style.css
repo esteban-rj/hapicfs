@@ -2105,5 +2105,57 @@ textarea::placeholder {
 .message-body:has(.image-preview) { width: 100%; }
 .file-preview > .image-preview { margin: 16px; width: calc(100% - 32px); }
 .modal-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 22px; }
+.tools-page { display: grid; gap: 22px; max-width: 1100px; }
+.tool-workspace, .tool-connect-row, .tool-channel-heading, .tool-preview-footer { display: flex; justify-content: space-between; align-items: center; gap: 18px; }
+.tool-workspace { padding: 4px 0 8px; }
+.tool-workspace label { margin-top: 0; }
+.tool-workspace p, .tool-body p { color: #737373; font-size: 12px; line-height: 1.9; }
+.tool-workspace > select { max-width: 300px; }
+.tool-body { padding: 26px; min-width: 0; }
+.tool-body h2 { font-size: 22px; margin: 0 0 10px; }
+.tool-body h3 { font-size: 13px; margin-bottom: 5px; }
+.tool-features { display: flex; flex-wrap: wrap; gap: 8px; margin: 18px 0 24px; }
+.tool-features span { font-size: 10px; background: #f5f5f5; border: 1px solid #eee; border-radius: 4px; padding: 5px 9px; }
+.tool-credentials { border: 1px solid #e5e5e5; border-radius: 7px; margin: 0 0 26px; }
+.tool-credentials summary { display: flex; align-items: center; gap: 9px; padding: 16px; font-size: 12px; cursor: pointer; }
+.tool-credentials summary span { margin-left: auto; font-size: 10px; color: #737373; }
+.tool-credentials[open] summary { border-bottom: 1px solid #e5e5e5; }
+.tool-credentials > div { padding: 18px; }
+.tool-server-credentials { border: 1px solid #e5e5e5; border-radius: 7px; padding: 18px; margin-bottom: 26px; }
+.tool-server-credentials > div { display: flex; align-items: center; flex-wrap: wrap; gap: 9px; font-size: 12px; }
+.tool-server-credentials span { margin-left: auto; font-size: 10px; color: #737373; }
+.tool-server-credentials p { margin-top: 10px; }
+.tool-redirect { display: block; overflow-wrap: anywhere; font-size: 11px; background: #f6f6f6; padding: 12px; border-radius: 5px; }
+.tool-connect-row { margin-bottom: 18px; }
+.tool-connect-row .primary { flex-shrink: 0; }
+.tool-empty { padding: 25px; border: 1px dashed #dedede; border-radius: 6px; font-size: 12px; color: #777; text-align: center; }
+.tool-notice { display: flex; gap: 10px; align-items: center; padding: 14px 18px; border: 1px solid #d8e8dd; border-radius: 6px; background: #f5faf7; font-size: 12px; line-height: 1.7; }
+.tool-connection { padding: 18px; border: 1px solid #e5e5e5; border-radius: 7px; margin-bottom: 12px; }
+.tool-channel-heading { margin-bottom: 14px; }
+.tool-channel-heading strong { font-size: 13px; }
+.tool-channel-id { display: block; color: #888; font-size: 10px; margin-top: 5px; overflow-wrap: anywhere; }
+.tool-status { font-size: 10px; color: #96652b; flex-shrink: 0; }
+.tool-status.connected { color: #348156; }
+.tool-connection .text-button { display: inline-flex; align-items: center; gap: 5px; font-size: 11px; }
+.tool-connection .button-row { flex-wrap: wrap; }
+.tool-assignment-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; margin-top: 22px; }
+.tool-assignment { border: 1px solid #e5e5e5; border-radius: 7px; padding: 18px; min-width: 0; }
+.tool-agent-name { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px; }
+.tool-agent-name strong { font-size: 13px; }
+.tool-agent-name span { font-size: 10px; color: #777; }
+.tool-toggle { display: flex; align-items: center; gap: 8px; }
+.tool-toggle input { width: auto; accent-color: #222; }
+.tool-assignment-footer { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-top: 15px; }
+.tool-assignment-footer > span { font-size: 10px; color: #777; }
+.tool-disconnect { margin-top: 18px; padding-top: 14px; border-top: 1px solid #eee; }
+.tool-disconnect p { margin-bottom: 12px; }
+.tool-preview-footer { margin-top: 18px; color: #888; font-size: 10px; }
+.tool-videos td:first-child { min-width: 200px; }
+@media (max-width: 760px) {
+  .tool-body { padding: 18px; }
+  .tool-workspace, .tool-connect-row { align-items: stretch; flex-direction: column; gap: 12px; }
+  .tool-workspace > select { max-width: none; }
+  .tool-assignment-grid { grid-template-columns: 1fr; }
+}
 @media (max-width: 1250px) { .templates-layout { grid-template-columns: 1fr; } }
 @media (max-width: 760px) { .template-catalog { grid-template-columns: 1fr; } .message-body { max-width: calc(100% - 40px); } }

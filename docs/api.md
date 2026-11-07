@@ -4,7 +4,7 @@ La URL predeterminada es `http://127.0.0.1:8000`. La API utiliza JSON y está di
 
 ## Sesión
 
-`GET /api/bootstrap` establece la cookie `hapic_session` (HttpOnly y SameSite Strict) y devuelve un token `csrf`. Las operaciones que modifican datos requieren esa cookie y el encabezado `X-Hapic-CSRF`. Cuando se envía `Origin`, debe coincidir con el origen de la solicitud.
+`GET /api/bootstrap` establece la cookie `hapic_session` (HttpOnly y SameSite Lax para permitir el retorno GET de Google OAuth) y devuelve un token `csrf`. Las operaciones que modifican datos requieren esa cookie y el encabezado `X-Hapic-CSRF`. Cuando se envía `Origin`, debe coincidir con el origen de la solicitud.
 
 Los hosts de la interfaz y API se limitan a `localhost`, `127.0.0.1` y `::1`. Los endpoints MCP usan autenticación separada con Bearer token por agente y protección contra DNS rebinding.
 
@@ -33,6 +33,15 @@ Los hosts de la interfaz y API se limitan a `localhost`, `127.0.0.1` y `::1`. Lo
 | PUT | `/api/agents/{agent_id}/model` | Modelo y esfuerzo de un agente existente |
 | PUT | `/api/settings/openai` | Guardar `api_key` en el servidor; nunca devuelve su valor |
 | DELETE | `/api/settings/openai` | Eliminar la credencial guardada en archivo del servidor |
+| GET | `/api/tools` | Catálogo de integraciones reutilizables |
+| GET | `/api/settings/youtube` | Estado, origen (`file`, `server`, `none`), scopes y URI de retorno; sin secretos o ruta privada |
+| PUT | `/api/settings/youtube` | Cargar el JSON OAuth web en `credentials` para el operador local; se rechaza cuando el servidor administra un archivo |
+| GET | `/api/projects/{project_id}/tools` | Conexiones y asignaciones del proyecto autorizado |
+| PUT | `/api/agents/{agent_id}/tools/{tool_id}` | Configurar `enabled` y `connection_id` para cualquier tipo de agente |
+| POST | `/api/projects/{project_id}/connections/youtube/authorize` | Iniciar OAuth con estado por sesión/proyecto y PKCE |
+| GET | `/api/connections/youtube/callback` | Consumir estado de un solo uso y verificar el canal en Google |
+| DELETE | `/api/projects/{project_id}/connections/{connection_id}` | Revocar y desconectar el canal del proyecto |
+| GET | `/api/projects/{project_id}/connections/{connection_id}/videos` | Página de vídeos real; `page_token` opcional |
 
 El nivel de razonamiento admitido por la plataforma es `low`, `medium`, `high`, `xhigh` o `max`. La compatibilidad del modelo elegido también depende del proveedor.
 
@@ -57,7 +66,7 @@ Los mensajes incluyen `attachments: []`. Cada imagen registrada incluye `id`, `p
 
 `template` admite `ux` (predeterminado por compatibilidad), `graphic-designer`, `architect`, `coder` y `community-manager`. Ejemplo: `{"name":"Lin","template":"coder","planner_id":"agt_…"}`. El arquitecto debe existir en el mismo proyecto. Community Manager no requiere `planner_id`: `{"name":"Alma","template":"community-manager"}`.
 
-Community Manager solo dispone de herramientas de archivos. No hay rutas OAuth ni herramientas sociales implementadas; la [propuesta de conexión a Instagram y YouTube](community-manager.md) detalla el trabajo pendiente.
+Community Manager incluye herramientas de archivos y YouTube de solo lectura, pendiente de un canal autorizado. La integración se puede asignar a cualquier agente desde Herramientas. Consulta [YouTube](youtube.md) para su configuración y los límites actuales; Instagram, publicación y respuestas siguen pendientes.
 
 ## MCP
 
@@ -76,6 +85,10 @@ El servidor MCP se monta en `/mcp/` mediante el SDK oficial de Python. Los token
 | `generate_project_image` | UX y diseñador gráfico | `prompt`, `size` opcional; una imagen facturable guardada y adjunta |
 | `publish_architecture_plan` | Arquitecto | `content` Markdown, hasta 256 KB |
 | `get_architecture_plan` | Coder | Plan del arquitecto vinculado y revisión, sin argumentos |
+| `youtube_get_channel` | Cualquier agente con YouTube habilitado y canal asignado | Sin argumentos |
+| `youtube_list_videos` | Misma autorización por agente/proyecto | `max_results` 1–50, `page_token` opcional |
+| `youtube_list_comments` | Misma autorización; valida el vídeo del canal | `video_id` opcional, `max_results` 1–50, `page_token` |
+| `youtube_get_analytics` | Misma autorización por agente/proyecto | `start_date`, `end_date` YYYY-MM-DD, hasta 366 días |
 
 Las herramientas se filtran en la configuración Hermes y se autorizan de nuevo en el servidor. Que `create_ux_agent` devuelva un perfil y trabajo en cola no significa que su contenedor esté listo; consulta el runtime.
 

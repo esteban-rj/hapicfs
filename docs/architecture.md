@@ -26,12 +26,14 @@ flowchart LR
 | Almacenamiento | SQLite, rutas persistentes, cifrado y tokens | `backend/storage.py` |
 | Runtime | Configuración Hermes, contenedores, readiness y chat | `backend/runtime.py` |
 | Plantillas | Comportamiento y método revisables, sin estado privado | `templates/` |
+| Herramientas | Catálogo de integraciones y permisos efectivos por agente | `backend/tool_catalog.py` |
+| YouTube | OAuth de Google, tokens cifrados y consultas limitadas al canal asignado | `backend/youtube.py` |
 
 FastAPI sirve el build de Vite en producción. En desarrollo, Vite reenvía `/api` al backend. El chat actual espera una respuesta completa del servidor; la interfaz no implementa streaming de tokens.
 
 ## Modelo de datos
 
-Una organización agrupa proyectos. Cada proyecto tiene un orquestador Hapic y especialistas UX, diseño gráfico, arquitectura/planning, código o community management. La tabla `memberships` relaciona al operador local con las organizaciones y se comprueba al acceder a proyectos o agentes. Community Manager trabaja con archivos propios; las conexiones a Instagram y YouTube son una [propuesta de desarrollo](community-manager.md), sin conectores activos.
+Una organización agrupa proyectos. Cada proyecto tiene un orquestador Hapic y especialistas UX, diseño gráfico, arquitectura/planning, código o community management. La tabla `memberships` relaciona al operador local con las organizaciones y se comprueba al acceder a proyectos o agentes. El [catálogo de herramientas](youtube.md) permite asignar YouTube de solo lectura a cualquier agente; Community Manager lo incluye inicialmente. Los canales OAuth pertenecen al proyecto y las credenciales permanecen en el servidor.
 
 `platform.db` contiene organizaciones, pertenencias, proyectos, agentes, mensajes visibles, imágenes, actividad, ajustes y sesiones locales. `agents.planner_id` vincula un coder al arquitecto. El estado de Hermes vive en otro SQLite dentro de su propio perfil. La inicialización crea tablas e índices y añade `planner_id` a instalaciones previas sin borrar datos; no incluye un framework general de migraciones.
 

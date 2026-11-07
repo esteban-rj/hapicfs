@@ -1,0 +1,11 @@
+# Optional server-side OAuth credentials. The file is mounted at runtime, never copied into the image.
+services:
+  hapic:
+    environment:
+      HAPIC_YOUTUBE_CLIENT_FILE: /run/secrets/youtube_oauth_client
+    secrets:
+      - youtube_oauth_client
+
+secrets:
+  youtube_oauth_client:
+    file: ${HAPIC_YOUTUBE_CLIENT_JSON:?Set the absolute host path to the Google OAuth web-client JSON}

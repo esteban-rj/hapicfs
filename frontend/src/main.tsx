@@ -21,6 +21,7 @@ import {
   Settings,
   ShieldCheck,
   Sparkles,
+  Wrench,
   X,
 } from "lucide-react";
 import {
@@ -50,18 +51,21 @@ import {
 } from "./components";
 import "./style.css";
 import { ModelSelect } from "./ModelSelect";
+import { ToolsPanel } from "./ToolsPanel";
 
 type Page =
   | "Resumen"
   | "Proyectos"
   | "Agentes"
   | "Plantillas"
+  | "Herramientas"
   | "Configuración";
 const nav = [
   { name: "Resumen" as Page, icon: LayoutGrid },
   { name: "Proyectos" as Page, icon: Layers },
   { name: "Agentes" as Page, icon: Sparkles },
   { name: "Plantillas" as Page, icon: Folder },
+  { name: "Herramientas" as Page, icon: Wrench },
   { name: "Configuración" as Page, icon: Settings },
 ];
 function App() {
@@ -117,6 +121,24 @@ function App() {
       )
       .catch((e) => setError(e.message));
   }, [refresh]);
+  useEffect(() => {
+    if (!state) return;
+    const query = new URLSearchParams(window.location.search);
+    const result = query.get("youtube");
+    if (!result) return;
+    setPage("Herramientas");
+    if (result === "connected") {
+      const returnedProject = state.projects.find((item) => item.id === query.get("project_id"));
+      if (returnedProject) {
+        setOrgId(returnedProject.organization_id);
+        setProjectId(returnedProject.id);
+      }
+      setToast("Canal de YouTube conectado. Ya puedes asignarlo a tus agentes.");
+    } else {
+      setError("No se pudo completar la conexión con Google. Comprueba los usuarios de prueba, concede ambos permisos de lectura y vuelve a conectar el canal.");
+    }
+    window.history.replaceState(null, "", window.location.pathname);
+  }, [state]);
   useEffect(() => {
     if (state?.settings) {
       setModel(state.settings.model);
@@ -359,7 +381,7 @@ function App() {
                 setPage(n);
                 if (n !== "Agentes") {
                   setAgentId("");
-                  setProjectId("");
+                  if (n !== "Herramientas") setProjectId("");
                 }
               }}
             >
@@ -449,6 +471,8 @@ function App() {
                 "Un punto de partida claro para cada especialista."
               ) : page === "Configuración" ? (
                 "Conecta tu entorno y elige cómo trabaja Hapic."
+              ) : page === "Herramientas" ? (
+                "Conexiones que amplían lo que puede hacer tu equipo."
               ) : agent ? (
                 <Badge status={runtime?.status || agent.status} />
               ) : (
@@ -931,6 +955,7 @@ function App() {
                 </div>
               </div>
             ) : null}
+            {page === "Herramientas" ? <ToolsPanel projects={projects} agents={state.agents} selectedProjectId={projectId} onSelectProject={setProjectId} /> : null}
             {page === "Configuración" ? (
               <div className="settings-layout">
                 <section className="card settings-card">

@@ -10,3 +10,5 @@ __pycache__/
 *.pyc
 *.tsbuildinfo
 artifacts/
+client_secret*.json
+**/client_secret*.json

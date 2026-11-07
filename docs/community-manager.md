@@ -1,6 +1,6 @@
 # Community Manager e integración social
 
-Fecha de revisión: 2026-11-05. La plantilla está implementada; los conectores descritos aquí son una propuesta de desarrollo y no están disponibles todavía.
+Fecha de revisión: 2026-11-06. La plantilla y [YouTube de solo lectura](youtube.md) están implementados. Instagram, publicación, respuestas y programación son propuestas pendientes.
 
 ## Perfil disponible
 
@@ -17,7 +17,7 @@ Su objetivo es mantener la voz de marca, planear contenido para Instagram y YouT
 | Clasificación de comentarios y propuestas de respuesta | `respuestas-comunidad.md` |
 | Fuente, periodo, definición de métricas, resultados e hipótesis | `reporte-metricas.md` |
 
-Hoy solo puede listar, leer y escribir archivos propios. Trabaja con métricas y comentarios aportados por el usuario. No tiene navegación, publicación, programación, mensajes, generación de vídeo ni acceso a cuentas. Las propuestas visuales son briefs; el diseñador gráfico puede generar imágenes cuando se le soliciten. Una fecha en el CSV no crea un trabajo programado.
+Puede listar, leer y escribir archivos propios. Incluye YouTube de solo lectura: al conectar un canal en Herramientas y asignárselo, consulta vídeos, comentarios e informes reales. Cualquier agente puede recibir esta integración. Instagram sigue trabajando con datos aportados por el usuario. No tiene navegador, publicación, programación, respuestas o generación de vídeo. Los briefs visuales y las fechas del CSV siguen siendo propuestas.
 
 ## Opciones de conexión
 
@@ -33,9 +33,11 @@ Para Hapic se propone almacenamiento de medios con URLs temporales y una cola pe
 
 ### YouTube
 
+La configuración y las funciones de lectura actuales están documentadas en [YouTube](youtube.md). Los permisos de subida, respuesta y programación de la tabla siguiente corresponden a funciones futuras.
+
 Crear un proyecto de Google Cloud, habilitar **YouTube Data API v3**, configurar consentimiento y cliente OAuth y autorizar el canal. Una API key permite consultas públicas; las escrituras y los datos privados requieren OAuth. Para operar después de cerrar el navegador, solicitar acceso offline y guardar el refresh token cifrado. [Google: autorización de YouTube](https://developers.google.com/youtube/data/guides/authentication).
 
-| Función futura | API y permiso propuesto |
+| Función | API y permiso |
 | --- | --- |
 | Identificar canal y consultar datos de la cuenta | Data API, `youtube.readonly` |
 | Subir vídeo con título y descripción | `videos.insert`, `youtube.upload` |
@@ -50,7 +52,7 @@ Antes de ofrecerlo a terceros, comprobar la verificación OAuth aplicable. [Goog
 
 ## Arquitectura propuesta para Hapic
 
-Esta sección es una recomendación basada en el repositorio; no describe rutas o herramientas existentes.
+La arquitectura completa de escritura y programación es una propuesta. OAuth de Google, conexiones por proyecto, asignaciones de YouTube por agente y las cuatro consultas de lectura ya están disponibles; consulta sus rutas y controles en [YouTube](youtube.md).
 
 ```mermaid
 flowchart LR
@@ -84,4 +86,4 @@ flowchart LR
 
 Se recomienda empezar por el canal que ya tenga cuenta y recursos listos. Si ambos están disponibles, YouTube permite probar primero una subida privada; para una estrategia centrada en piezas gráficas y Reels, priorizar Instagram. La elección depende del objetivo de la marca.
 
-La validación de conectores necesitará cuentas de prueba y consentimiento real, además de pruebas de alcance por proyecto, renovación/revocación, cambios de borrador, reintentos y ausencia de secretos en archivos y respuestas. Esta entrega verifica el perfil y sus permisos de archivos; no acredita una conexión social ni una publicación real.
+Las consultas YouTube y OAuth se verifican con un transporte de Google exclusivo de pruebas, incluidos alcance, renovación/revocación y ausencia de secretos. Una cuenta real requiere el consentimiento del usuario; los dobles no acreditan una conexión real. Las funciones futuras de escritura necesitarán además pruebas de cambios de borrador, autorización, reintentos y publicaciones reales.

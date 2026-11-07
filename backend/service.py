@@ -13,7 +13,9 @@ from urllib.parse import urlencode
 from .images import IMAGE_TYPES, MAX_IMAGE_BYTES, ImageGenerator, atomic_write, image_type
 from .runtime import DockerRuntime, RuntimeUnavailable
 from .storage import ROOT, DEFAULT_MODEL, Store, now, uid
-from .templates import SPECIALISTS, template as load_template, tools_for
+from .templates import SPECIALISTS, template as load_template
+from .tool_catalog import CATALOG, defaults, effective_tools
+from .youtube import YouTube
 
 SAFE_EXTENSIONS = {".md", ".txt", ".json", ".yaml", ".yml", ".csv", ".html", ".css", ".svg", ".py", ".js", ".jsx", ".ts", ".tsx", ".mjs", ".cjs", ".sql", ".toml", ".xml", ".scss", ".vue", ".svelte", ".go", ".rs", ".java", ".kt", ".c", ".h", ".cpp", ".cs", ".sh", ".ps1"}
 HIDDEN_NAMES = {"secrets", ".env", "auth.json", "logs", "cache", "installs", ".git", "node_modules", "mcp-tokens"}
@@ -62,6 +64,7 @@ class Service:
         self.store = store
         self.runtime = runtime or DockerRuntime()
         self.images = ImageGenerator()
+        self.youtube = YouTube(store, self.project)
         self.locks = {}
         self.locks_guard = threading.Lock()
 
@@ -122,6 +125,11 @@ class Service:
             self.store.execute("INSERT INTO agents(id,organization_id,project_id,name,kind,template,model,effort,status,container_id,error,created_at,planner_id) VALUES (:id,:organization_id,:project_id,:name,:kind,:template,:model,:effort,:status,:container_id,:error,:created_at,:planner_id)", agent)
         except sqlite3.IntegrityError:
             raise ValueError("Ya existe un agente con ese nombre en el proyecto.") from None
+        for tool_id in defaults(kind):
+            connections = self.youtube.connections(project_id)
+            selected = [c for c in connections if c["status"] == "connected"]
+            connection_id = selected[0]["id"] if len(selected) == 1 else None
+            self.store.execute("INSERT INTO agent_tools VALUES (?,?,?,1)", (agent["id"], tool_id, connection_id))
         home = self.store.agent_path(agent) / "hermes"
         home.mkdir(parents=True)
         template = ROOT / "templates" / kind
@@ -170,10 +178,49 @@ class Service:
                 return agent
         raise PermissionError("Autorización MCP inválida.")
 
+    def project_tools(self, project_id):
+        self.project(project_id)
+        return {"connections": self.youtube.connections(project_id),
+                "assignments": self.store.all("SELECT t.* FROM agent_tools t JOIN agents a ON a.id=t.agent_id WHERE a.project_id=?", (project_id,))}
+
+    def assign_tool(self, agent_id, tool_id, enabled, connection_id=None):
+        agent = self.agent(agent_id)
+        if tool_id not in CATALOG:
+            raise ValueError("Selecciona una herramienta disponible en el catálogo.")
+        if connection_id:
+            connection = self.youtube.connection(agent["project_id"], connection_id, active=False)
+            if connection["provider"] != CATALOG[tool_id]["provider"] or connection["status"] == "disconnected":
+                raise ValueError("Selecciona una conexión disponible para esta herramienta.")
+        if not self.lock(agent_id).acquire(blocking=False):
+            raise RuntimeUnavailable("Espera a que termine el turno o la provisión antes de cambiar herramientas.")
+        try:
+            previous = self.store.one("SELECT * FROM agent_tools WHERE agent_id=? AND tool_id=?", (agent_id, tool_id))
+            self.store.execute("INSERT INTO agent_tools VALUES (?,?,?,?) ON CONFLICT(agent_id,tool_id) DO UPDATE SET connection_id=excluded.connection_id,enabled=excluded.enabled", (agent_id, tool_id, connection_id, int(enabled)))
+            try:
+                self.runtime.prepare(agent, self.store)
+            except Exception:
+                if previous:
+                    self.store.execute("UPDATE agent_tools SET connection_id=?,enabled=? WHERE agent_id=? AND tool_id=?", (previous["connection_id"], previous["enabled"], agent_id, tool_id))
+                else:
+                    self.store.execute("DELETE FROM agent_tools WHERE agent_id=? AND tool_id=?", (agent_id, tool_id))
+                raise RuntimeUnavailable("No se pudo preparar el perfil con estas herramientas. Se conservó la asignación anterior.") from None
+            self.store.event(agent_id, f"Herramienta {CATALOG[tool_id]['name']} {'habilitada' if enabled else 'deshabilitada'} por el operador.")
+            return {"tool_id": tool_id, "enabled": enabled, "connection_id": connection_id, "runtime_restart_required": bool(agent["container_id"])}
+        finally:
+            self.lock(agent_id).release()
+
     def tool(self, agent, name, args):
+        agent = self.agent(agent["id"])
         project = self.project(agent["project_id"])
-        if name not in tools_for(agent["kind"]):
+        if name not in effective_tools(agent, self.store):
             raise PermissionError("Herramienta fuera del alcance autorizado.")
+        if name in CATALOG["youtube"]["actions"]:
+            binding = self.store.one("SELECT * FROM agent_tools WHERE agent_id=? AND tool_id='youtube' AND enabled=1", (agent["id"],))
+            if not binding or not binding["connection_id"]:
+                raise ValueError("YouTube está pendiente de conexión. Selecciona un canal en Herramientas para este agente.")
+            result = self.youtube.run(project["id"], binding["connection_id"], name, args)
+            self.store.event(agent["id"], f"YouTube: consulta {name} completada en el canal autorizado.")
+            return result
         if name == "get_ux_template" and agent["kind"] == "hapic":
             return load_template("ux")
         if name == "list_agent_templates":

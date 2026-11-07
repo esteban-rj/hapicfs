@@ -9,7 +9,8 @@ Los cinco bocetos previos están conservados en [docs/mockups](docs/mockups). La
 - [Arquitectura](docs/architecture.md): componentes, datos, provisión y límites de acceso.
 - [API y MCP](docs/api.md): rutas, sesión local, herramientas y errores.
 - [Operación](docs/operations.md): arranque, credenciales, persistencia, copias y diagnóstico.
-- [Community Manager e integración social](docs/community-manager.md): perfil disponible y propuesta de conexión a Instagram y YouTube.
+- [YouTube](docs/youtube.md): conexión OAuth, consultas reales y asignación a cualquier agente.
+- [Community Manager e integración social](docs/community-manager.md): perfil disponible y evolución de otras funciones sociales.
 - [Changelog](CHANGELOG.md): versiones y cambios pendientes de publicación.
 
 ## Ejecutar localmente en Windows
@@ -50,7 +51,7 @@ Sin Docker o sin key, el chat de IA está deshabilitado. **Preparar** o **Usar p
 | Coder | Implementación en archivos siguiendo el plan del arquitecto vinculado |
 | Community Manager | Estrategia, calendario, copys, guiones, propuestas de respuesta y análisis de métricas aportadas |
 
-El Community Manager prepara borradores para Instagram y YouTube con memoria y archivos propios. Actualmente no hay conectores sociales: no publica, programa ni consulta cuentas. La [propuesta de integración](docs/community-manager.md) describe OAuth, APIs oficiales y el trabajo necesario para habilitar esas funciones.
+El Community Manager prepara borradores para Instagram y YouTube con memoria y archivos propios. Incluye **YouTube de solo lectura**: conecta un canal desde **Herramientas**, consulta vídeos, comentarios y métricas y asigna el canal a los agentes que elijas. Cualquier tipo de agente puede integrarla. El administrador configura el JSON OAuth en el servidor, por ejemplo como secreto de Docker con `./scripts/start-docker.sh "/ruta/privada/google-oauth.json"`; cada cliente solo autoriza su canal desde Google. La [guía de YouTube](docs/youtube.md) detalla configuración, permisos y alcance. Instagram, publicación, programación y respuestas siguen pendientes.
 
 Crea primero el arquitecto y después el coder, seleccionando ese arquitecto del mismo proyecto. El arquitecto publica mediante `publish_architecture_plan`; el coder usa `get_architecture_plan` antes de escribir. Si el plan cambia, debe volver a leerlo. Para el planner se recomienda un modelo de capacidad media a superior (`gpt-6.1-sol`, esfuerzo `high` para trabajo complejo); las preferencias globales se conservan y pueden ajustarse en cada conversación. El coder puede escribir código y pruebas, pero no dispone de terminal para ejecutarlas.
 
@@ -126,7 +127,7 @@ pnpm build
 
 En un sandbox Windows que bloquee sockets, las pruebas ASGI/TestClient y el servidor pueden requerir ejecución autorizada fuera de ese aislamiento. No se cambia el firewall ni las protecciones globales.
 
-Las pruebas cubren persistencia al reabrir almacenamiento, valores por defecto, CSRF/origen, pertenencia, secretos cifrados y errores redactados, rutas, alcance MCP, protocolo MCP real, plantillas limpias, cambios de modelo, idempotencia de chat y contrato `/v1/responses`. También comprueban las cinco plantillas, la creación de Community Manager por MCP sin duplicados y su trabajo con borradores sin acceso social, el vínculo arquitecto/coder, la lectura del plan vigente antes de escribir y la generación, persistencia, permisos y descarga de imágenes con un doble de OpenAI Images. El resultado verificado es 17 pruebas aprobadas y 1 omitida. Los dobles de Docker/Hermes e Images se utilizan solo en pruebas; no son un modo de ejecución de producción. La prueba de enlace simbólico se omite cuando Windows no concede el permiso necesario.
+Las pruebas cubren persistencia, valores por defecto, CSRF/origen, pertenencia, secretos cifrados, errores redactados, rutas, permisos y protocolo MCP, plantillas, modelos, idempotencia y contrato `/v1/responses`; también planes de arquitecto/coder e imágenes persistentes. La suite de YouTube verifica OAuth con PKCE y estado ligado a sesión, asignaciones por agente y proyecto, renovación, consultas y desconexión. Los dobles de Docker/Hermes, Images y Google se utilizan solo en pruebas; no son un modo de ejecución de producción. No se realizan llamadas facturables. La prueba de enlace simbólico puede omitirse cuando Windows no concede permiso.
 
 **Verificación local de despliegue:** después de instalar Docker Desktop y WSL2 y reiniciar Windows, el motor Linux ejecutó un contenedor `hello-world` real. La imagen de Hapic se construyó y Compose la inició con estado `healthy` en `127.0.0.1:8000`, conservando el almacenamiento existente. Se comprobó un montaje real de Windows desde el provisionador y las APIs autenticadas de dos contenedores oficiales Hermes (Hapic y UX). Sus perfiles tienen `state.db` y directorios de memoria persistentes. La plataforma ya registra respuestas reales de Hermes usando la credencial configurada por el usuario, con `gpt-6.1-sol` y `xhigh`.
 

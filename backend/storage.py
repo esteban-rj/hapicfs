@@ -48,6 +48,19 @@ class Store:
             CREATE TABLE IF NOT EXISTS settings(key TEXT PRIMARY KEY,value TEXT);
             CREATE TABLE IF NOT EXISTS sessions(token TEXT PRIMARY KEY,csrf TEXT,created_at TEXT);
             CREATE TABLE IF NOT EXISTS images(id TEXT PRIMARY KEY,agent_id TEXT REFERENCES agents(id),message_id INTEGER REFERENCES messages(id),path TEXT,mime_type TEXT,created_at TEXT);
+            CREATE TABLE IF NOT EXISTS connections(
+                id TEXT PRIMARY KEY,project_id TEXT NOT NULL REFERENCES projects(id),provider TEXT NOT NULL,
+                account_id TEXT NOT NULL,account_name TEXT NOT NULL,scopes TEXT NOT NULL,status TEXT NOT NULL,
+                created_at TEXT NOT NULL,updated_at TEXT NOT NULL,UNIQUE(project_id,provider,account_id));
+            CREATE TABLE IF NOT EXISTS agent_tools(
+                agent_id TEXT NOT NULL REFERENCES agents(id),tool_id TEXT NOT NULL,
+                connection_id TEXT REFERENCES connections(id),enabled INTEGER NOT NULL DEFAULT 1,
+                PRIMARY KEY(agent_id,tool_id));
+            CREATE TABLE IF NOT EXISTS oauth_states(
+                state_hash TEXT PRIMARY KEY,session_hash TEXT NOT NULL,project_id TEXT NOT NULL REFERENCES projects(id),
+                verifier TEXT NOT NULL,redirect_uri TEXT NOT NULL,client_fingerprint TEXT NOT NULL,expires_at INTEGER NOT NULL);
+            INSERT OR IGNORE INTO agent_tools(agent_id,tool_id,enabled)
+                SELECT id,'youtube',1 FROM agents WHERE kind='community-manager';
             ''')
             if "planner_id" not in {row[1] for row in db.execute("PRAGMA table_info(agents)")}:
                 db.execute("ALTER TABLE agents ADD COLUMN planner_id TEXT REFERENCES agents(id)")

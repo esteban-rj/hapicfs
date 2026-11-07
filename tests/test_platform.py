@@ -30,6 +30,7 @@ class TestRuntime(DockerRuntime):
 @pytest.fixture
 def app(tmp_path, monkeypatch):
     monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    monkeypatch.delenv("HAPIC_YOUTUBE_CLIENT_FILE", raising=False)
     return create_app(tmp_path, TestRuntime())
 
 
@@ -274,7 +275,7 @@ def test_specialist_catalog_creation_and_scope(client, app):
         app.state.service.tool(designer, "create_specialist_agent", {"name": "No", "template": "architect"})
 
 
-def test_community_manager_mcp_creation_and_drafts_without_social_access(client, app):
+def test_community_manager_mcp_creation_and_drafts_with_unconnected_youtube(client, app):
     p = project(client)
     service, store = app.state.service, app.state.store
     hapic = store.one("SELECT * FROM agents WHERE project_id=? AND kind='hapic'", (p["id"],))
@@ -289,7 +290,9 @@ def test_community_manager_mcp_creation_and_drafts_without_social_access(client,
     repeated = service.tool(hapic, "create_specialist_agent", args)
     assert repeated["already_exists"] and repeated["id"] == manager["id"]
     config = yaml.safe_load((store.agent_path(manager) / "hermes/config.yaml").read_text(encoding="utf-8"))
-    assert set(config["mcp_servers"]["hapic"]["tools"]["include"]) == {"project_list_files", "project_read_file", "project_write_file"}
+    assert set(config["mcp_servers"]["hapic"]["tools"]["include"]) == {"project_list_files", "project_read_file", "project_write_file", "youtube_get_channel", "youtube_list_videos", "youtube_list_comments", "youtube_get_analytics"}
+    with pytest.raises(ValueError, match="pendiente de conexión"):
+        service.tool(manager, "youtube_get_channel", {})
     draft = "id,fecha,canal,estado\n1,2026-11-06,instagram,borrador\n"
     saved = service.tool(manager, "project_write_file", {"path": "calendario-editorial.csv", "content": draft})
     assert saved["saved"]

@@ -45,6 +45,8 @@ Para rotarla, guarda la nueva key en su origen y reinicia los agentes desde la i
 
 ## Ciclo de vida de contenedores
 
+Para cargar el cliente OAuth de YouTube en el servidor, usa `./scripts/start-docker.sh "/ruta/privada/google-oauth.json"` en macOS/Linux o `scripts/start-docker.ps1 -YouTubeClientJson 'C:\ruta\privada\google-oauth.json'` en Windows. Activa el secreto de `compose.youtube.yaml` exclusivamente en el control de gestión; los clientes conectan sus canales sin subir archivos. También se puede iniciar el servidor nativo con `HAPIC_YOUTUBE_CLIENT_FILE` apuntando al archivo privado. Consulta [YouTube](youtube.md#credenciales-administradas-en-docker) para el despliegue y la rotación.
+
 Compose administra el control de gestión. Los contenedores Hermes se crean dinámicamente y siguen un ciclo de vida independiente. `docker compose stop` no detiene por sí solo esos agentes.
 
 Para detener un agente concreto, identifica su nombre en **Runtime real** y ejecuta `docker stop` con ese nombre exacto. Para recrearlo, usa **Iniciar runtime** o **Reiniciar runtime** en la UI. La recreación conserva los directorios montados del perfil y del workspace.
