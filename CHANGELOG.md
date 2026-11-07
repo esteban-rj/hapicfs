@@ -4,6 +4,14 @@ Este archivo registra los cambios del proyecto. Las versiones siguen el esquema 
 
 ## Sin publicar — 2026-11-07
 
+### Oficinas 3D por proyecto
+
+- Oficina Three.js bajo demanda desde cada tarjeta, el proyecto seleccionado o su menú lateral, inspirada en `hermes-game-studio/hermes-office-3d`.
+- Diorama con puestos y personajes para el equipo real del proyecto, distribución adaptable y acceso a las conversaciones existentes.
+- Cámara orbital, zoom, vista superior y pantalla completa; diseño móvil, navegación por teclado y lista accesible cuando falla WebGL.
+- Animaciones vinculadas a ejecución confirmada, sin iniciar runtimes ni enviar mensajes al abrir la vista; recursos gráficos liberados al cerrar.
+- Pruebas de aislamiento y estados, y recorrido en navegador con FastAPI/SQLite temporales y sin credenciales de proveedores.
+
 ### HeyGen y vídeos persistentes
 
 - Conexión por API key cifrada por proyecto, con verificación de cuenta, clave activa y permisos de lectura/generación mediante la API v3.
@@ -41,6 +49,7 @@ Este archivo registra los cambios del proyecto. Las versiones siguen el esquema 
 
 ### Corregido
 
+- La interfaz muestra un mensaje comprensible cuando el servidor responde con un error en texto o una respuesta JSON no válida, en lugar de mostrar `Unexpected token`.
 - El chat muestra imágenes adjuntas y referencias Markdown a imágenes locales del workspace.
 - Se guarda el archivo antes de anunciar éxito; el adjunto persiste aunque falle después Hermes.
 - El explorador reconoce PNG, JPEG, WebP y GIF válidos, además de documentos de texto.

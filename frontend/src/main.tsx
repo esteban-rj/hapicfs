@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState, useMemo } from "react";
+import React, { lazy, Suspense, useCallback, useEffect, useState, useMemo, useRef } from "react";
 import { createRoot } from "react-dom/client";
 import {
   ArrowRight,
@@ -64,6 +64,8 @@ import { ModelSelect } from "./ModelSelect";
 import { ToolsPanel } from "./ToolsPanel";
 import { TeamDemo } from "./TeamDemo";
 
+const ProjectOffice = lazy(() => import("./ProjectOffice"));
+
 type TeamTask = { id: string; agent_id: string; agent_name: string; objective: string; state: string; executing: boolean; latest_activity: string | null };
 type TeamExecution = { busy: boolean; active_tasks: number; queued_tasks: number; tasks?: TeamTask[]; busy_agents?: string[] };
 
@@ -89,6 +91,15 @@ function App() {
   const [createTemplate, setCreateTemplate] = useState<Template>();
   const [orgId, setOrgId] = useState("");
   const [projectId, setProjectId] = useState("");
+  const [officeProjectId, setOfficeProjectId] = useState("");
+  const officeOpener = useRef<HTMLElement | null>(null);
+  const closeOffice = useCallback(() => {
+    setOfficeProjectId("");
+    // Wait for both the lazy-loading dialog and the office dialog to close.
+    requestAnimationFrame(() => {
+      if (officeOpener.current?.isConnected) officeOpener.current.focus();
+    });
+  }, []);
   const [agentId, setAgentId] = useState("");
   const [page, setPage] = useState<Page>("Resumen");
   const [error, setError] = useState("");
@@ -166,6 +177,7 @@ function App() {
   const projects =
     state?.projects.filter((p) => p.organization_id === orgId) || [];
   const project = projects.find((p) => p.id === projectId);
+  const officeProject = projects.find((p) => p.id === officeProjectId);
   const agents =
     state?.agents.filter(
       (a) =>
@@ -252,7 +264,7 @@ function App() {
           previouslyWorking = working;
           setProjectActivity({...status, busy_agents: status.busy ? [coordinatorId] : []});
         }
-      } catch { /* The chat displays connection errors when opened. */ }
+      } catch { if (active) setProjectActivity(undefined); }
       if (active) timer = setTimeout(poll, 3000);
     }
     void poll();
@@ -374,11 +386,18 @@ function App() {
     setPage("Agentes");
   }
   function openAgent(a: Agent) {
+    setOfficeProjectId("");
     setProjectId(a.project_id);
     setAgentId(a.id);
     setPage("Agentes");
     setTab("Conversación");
     setFile(undefined);
+  }
+  function openOffice(p: Project) {
+    officeOpener.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    if (projectId !== p.id) setProjectActivity(undefined);
+    setProjectId(p.id);
+    setOfficeProjectId(p.id);
   }
   async function action(fn: () => Promise<void>) {
     setError("");
@@ -578,6 +597,9 @@ function App() {
                   </div>
                   {isExpanded ? (
                     <div className="agent-submenu">
+                      <button className="project-office-link" onClick={() => openOffice(p)}>
+                        <Box size={15} /> Oficina 3D
+                      </button>
                       {projectAgents.length ? (
                         projectAgents.map((a) => (
                           <button
@@ -646,6 +668,7 @@ function App() {
             </p>
           </div>
           <div className="page-actions">
+            {project ? <button className="secondary" onClick={() => openOffice(project)}><Box size={16} /> Abrir oficina 3D</button> : null}
             {(page === "Resumen" || page === "Agentes") && (
               <>
                 {projects.length ? (
@@ -812,6 +835,7 @@ function App() {
                                 ).length
                               }
                               click={() => openProject(p)}
+                              office={() => openOffice(p)}
                             />
                           ))}
                         </div>
@@ -942,6 +966,7 @@ function App() {
                         state.agents.filter((a) => a.project_id === p.id).length
                       }
                       click={() => openProject(p)}
+                      office={() => openOffice(p)}
                     />
                   ))}
                   <button
@@ -1413,6 +1438,13 @@ function App() {
           {toast}
         </div>
       ) : null}
+      {officeProject && state ? (
+        <OfficeBoundary key={officeProject.id} close={closeOffice}>
+          <Suspense fallback={<Modal title="Abriendo oficina 3D" close={closeOffice}><div className="loading"><LoaderCircle className="spin" size={22} /> Preparando la oficina de {officeProject.name}…</div></Modal>}>
+            <ProjectOffice project={officeProject} agents={state.agents} execution={projectActivity} close={closeOffice} openAgent={openAgent} />
+          </Suspense>
+        </OfficeBoundary>
+      ) : null}
       {createTemplate ? <CreateAgentModal template={createTemplate} projects={projects} agents={state?.agents || []} initialProjectId={projectId} close={() => setCreateTemplate(undefined)} created={async (created) => { await refresh(); setCreateTemplate(undefined); openAgent(created); setToast("Perfil creado. Consulta el estado real del runtime."); }} /> : null}
       {modal ? (
         <Modal
@@ -1509,13 +1541,16 @@ function ProjectCard({
   project,
   count,
   click,
+  office,
 }: {
   project: Project;
   count: number;
   click: () => void;
+  office: () => void;
 }) {
   return (
-    <button className="card project-card" onClick={click}>
+    <article className="card project-card">
+      <button className="project-card-open" onClick={click} aria-label={"Abrir proyecto " + project.name}>
       <div className="project-card-top">
         <span className="icon-tile">
           <Folder size={20} />
@@ -1526,6 +1561,8 @@ function ProjectCard({
       <p>
         {count} {count === 1 ? "agente" : "agentes"} en este proyecto
       </p>
+      </button>
+      <button className="secondary project-office-button" onClick={office} aria-label={"Abrir oficina 3D de " + project.name}><Box size={15} /> Oficina 3D <ArrowUpRight size={14} /></button>
       <div className="project-card-footer">
         <code>{project.id.slice(0, 13)}</code>
         <span>
@@ -1535,8 +1572,16 @@ function ProjectCard({
           })}
         </span>
       </div>
-    </button>
+    </article>
   );
+}
+class OfficeBoundary extends React.Component<{ children: React.ReactNode; close: () => void }, { failed: boolean }> {
+  state = { failed: false };
+  static getDerivedStateFromError() { return { failed: true }; }
+  render() {
+    if (this.state.failed) return <Modal title="No se pudo abrir la oficina" close={this.props.close}><div className="loading">Comprueba la conexión y recarga la página para volver a intentarlo.</div></Modal>;
+    return this.props.children;
+  }
 }
 function AgentTable({
   agents,
