@@ -25,6 +25,7 @@ import {
   agentRoles,
   imageUrl,
   videoUrl,
+  apiHref,
   type Agent,
   type Message,
   type Attachment,
@@ -282,7 +283,7 @@ function MessageContent({ message, agent }: { message: Message; agent: Agent }) 
       const path = relative.startsWith("agents/") || relative.startsWith("workspace/") ? relative : `agents/${agent.id}/workspace/${relative}`;
       if (!/\.(png|jpe?g|webp|gif)$/i.test(path)) {
         if (/\.mp4$/i.test(path)) return <VideoPreview key={path} src={videoUrl(agent.project_id, path)} name={match[1] || relative} download={videoUrl(agent.project_id, path, true)} />;
-        const url = `/api/projects/${agent.project_id}/artifacts/open?path=${encodeURIComponent(path)}`;
+        const url = apiHref(`/projects/${agent.project_id}/artifacts/open?path=${encodeURIComponent(path)}`);
         return <div className="document-attachment" key={path}><FileText size={17} /><strong>{match[1] || relative}</strong><a href={url} target="_blank" rel="noreferrer">Abrir documento</a><a href={url + "&download=true"} download>Descargar</a></div>;
       }
       return <ImagePreview key={path} src={imageUrl(agent.project_id, path)} alt={match[1] || relative} download={imageUrl(agent.project_id, path, true)} />;
