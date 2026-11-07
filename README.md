@@ -10,6 +10,7 @@ Los cinco bocetos previos están conservados en [docs/mockups](docs/mockups). La
 - [API y MCP](docs/api.md): rutas, sesión local, herramientas y errores.
 - [Operación](docs/operations.md): arranque, credenciales, persistencia, copias y diagnóstico.
 - [YouTube](docs/youtube.md): conexión OAuth, consultas reales y asignación a cualquier agente.
+- [HeyGen](docs/heygen.md): API key por proyecto, generación de clips con audio y MP4 persistentes.
 - [Community Manager e integración social](docs/community-manager.md): perfil disponible y evolución de otras funciones sociales.
 - [Changelog](CHANGELOG.md): versiones y cambios pendientes de publicación.
 
@@ -50,6 +51,8 @@ Sin Docker o sin key, el chat de IA está deshabilitado. **Preparar** o **Usar p
 | Arquitecto / Planner | Arquitectura y plan compartido con tareas, archivos, contratos y validación |
 | Coder | Implementación en archivos siguiendo el plan del arquitecto vinculado |
 | Community Manager | Estrategia, calendario, copys, guiones, propuestas de respuesta y análisis de métricas aportadas |
+
+**HeyGen** está disponible en **Herramientas**: conecta la API key del proyecto y asigna la cuenta a tus agentes. Community Manager la incluye preseleccionada. Genera clips con audio de 5 a 15 segundos desde texto o una imagen pública; el MP4 queda guardado y adjunto al chat, con reproducción y descarga en Archivos. Por defecto usa 5 s, 480p y formato vertical (estimación US$0,05). Los trabajos y reintentos se identifican para evitar duplicar generaciones; consulta la [guía de HeyGen](docs/heygen.md). Si el runtime ya estaba iniciado, reinícialo para cargar las nuevas herramientas.
 
 El Community Manager prepara borradores para Instagram y YouTube con memoria y archivos propios. Incluye **YouTube de solo lectura**: conecta un canal desde **Herramientas**, consulta vídeos, comentarios y métricas y asigna el canal a los agentes que elijas. Cualquier tipo de agente puede integrarla. El administrador configura el JSON OAuth en el servidor, por ejemplo como secreto de Docker con `./scripts/start-docker.sh "/ruta/privada/google-oauth.json"`; cada cliente solo autoriza su canal desde Google. La [guía de YouTube](docs/youtube.md) detalla configuración, permisos y alcance. Instagram, publicación, programación y respuestas siguen pendientes.
 

@@ -2,7 +2,18 @@
 
 Este archivo registra los cambios del proyecto. Las versiones siguen el esquema `MAJOR.MINOR.PATCH`.
 
-## Sin publicar — 2026-11-06
+## Sin publicar — 2026-11-07
+
+### HeyGen y vídeos persistentes
+
+- Conexión por API key cifrada por proyecto, con verificación de cuenta, clave activa y permisos de lectura/generación mediante la API v3.
+- HeyGen asignable a cualquier agente y preseleccionado en Community Manager; migración aditiva que conserva asignaciones deshabilitadas y perfiles existentes.
+- Herramientas MCP para generar clips con audio desde texto o imagen pública, consultar trabajos y recuperar los vídeos del propio agente y cuenta asignada.
+- Trabajos persistentes con clave de idempotencia estable, protección ante reintentos concurrentes y recuperación de envíos inciertos sin crear otra solicitud.
+- MP4 guardados atómicamente en el workspace, adjuntos del chat, reproducción y descarga autenticadas en Archivos y seguimiento desde Herramientas.
+- Corregida la validación de MP4 `iso5`/`iso6` de HeyGen para guardar, reproducir y recuperar vídeos completados sin repetir su generación.
+- Valor inicial de 5 segundos, 480p y formato vertical; estimación de coste visible y límite de 15 segundos.
+- Verificación del formulario, asignación automática, MCP y reproducción completa de un MP4 en una instalación temporal con proveedor ficticio; sin errores de consola ni llamadas facturables. La conexión con HeyGen real requiere la clave del usuario.
 
 ### YouTube y herramientas reutilizables
 

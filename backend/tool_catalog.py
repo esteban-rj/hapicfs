@@ -2,6 +2,15 @@
 from .templates import tools_for
 
 CATALOG = {
+    "heygen": {
+        "id": "heygen",
+        "name": "HeyGen",
+        "description": "Genera clips con audio desde texto o una imagen y guarda el MP4 en el proyecto.",
+        "provider": "heygen",
+        "access": "generate",
+        "requires_connection": True,
+        "actions": ["heygen_generate_video", "heygen_get_video", "heygen_list_videos"],
+    },
     "youtube": {
         "id": "youtube",
         "name": "YouTube",
@@ -15,7 +24,7 @@ CATALOG = {
 
 
 def defaults(kind):
-    return ["youtube"] if kind == "community-manager" else []
+    return ["youtube", "heygen"] if kind == "community-manager" else []
 
 
 def effective_tools(agent, store):

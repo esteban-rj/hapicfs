@@ -29,6 +29,10 @@ Los hosts de la interfaz y API se limitan a `localhost`, `127.0.0.1` y `::1`. Lo
 | GET | `/api/projects/{project_id}/tree` | Árbol real filtrado del proyecto |
 | GET | `/api/projects/{project_id}/file?path=…` | Vista previa de documento permitido |
 | GET | `/api/projects/{project_id}/image?path=…` | Imagen del workspace; `download=true` para descargar |
+| GET | `/api/projects/{project_id}/video?path=…` | MP4 registrado en el proyecto; admite Range y `download=true` |
+| POST | `/api/projects/{project_id}/connections/heygen` | Verificar `api_key`, cuenta y permisos; guardar la clave cifrada |
+| GET | `/api/projects/{project_id}/heygen/videos` | Hasta 50 trabajos locales del proyecto |
+| POST | `/api/projects/{project_id}/heygen/videos/{video_id}/refresh` | Consultar el estado remoto y guardar el MP4 al terminar; no genera otra pieza |
 | PUT | `/api/settings/model` | Modelo y esfuerzo predeterminados para nuevos agentes |
 | PUT | `/api/agents/{agent_id}/model` | Modelo y esfuerzo de un agente existente |
 | PUT | `/api/settings/openai` | Guardar `api_key` en el servidor; nunca devuelve su valor |
@@ -40,7 +44,7 @@ Los hosts de la interfaz y API se limitan a `localhost`, `127.0.0.1` y `::1`. Lo
 | PUT | `/api/agents/{agent_id}/tools/{tool_id}` | Configurar `enabled` y `connection_id` para cualquier tipo de agente |
 | POST | `/api/projects/{project_id}/connections/youtube/authorize` | Iniciar OAuth con estado por sesión/proyecto y PKCE |
 | GET | `/api/connections/youtube/callback` | Consumir estado de un solo uso y verificar el canal en Google |
-| DELETE | `/api/projects/{project_id}/connections/{connection_id}` | Revocar y desconectar el canal del proyecto |
+| DELETE | `/api/projects/{project_id}/connections/{connection_id}` | Desconectar la cuenta del proyecto; YouTube revoca OAuth y HeyGen elimina su clave local |
 | GET | `/api/projects/{project_id}/connections/{connection_id}/videos` | Página de vídeos real; `page_token` opcional |
 
 El nivel de razonamiento admitido por la plataforma es `low`, `medium`, `high`, `xhigh` o `max`. La compatibilidad del modelo elegido también depende del proveedor.
@@ -66,7 +70,7 @@ Los mensajes incluyen `attachments: []`. Cada imagen registrada incluye `id`, `p
 
 `template` admite `ux` (predeterminado por compatibilidad), `graphic-designer`, `architect`, `coder` y `community-manager`. Ejemplo: `{"name":"Lin","template":"coder","planner_id":"agt_…"}`. El arquitecto debe existir en el mismo proyecto. Community Manager no requiere `planner_id`: `{"name":"Alma","template":"community-manager"}`.
 
-Community Manager incluye herramientas de archivos y YouTube de solo lectura, pendiente de un canal autorizado. La integración se puede asignar a cualquier agente desde Herramientas. Consulta [YouTube](youtube.md) para su configuración y los límites actuales; Instagram, publicación y respuestas siguen pendientes.
+Community Manager incluye herramientas de archivos, YouTube de solo lectura y generación de clips con HeyGen, pendientes de sus conexiones asignadas. Las integraciones pueden asignarse a cualquier agente desde Herramientas. Consulta [YouTube](youtube.md) y [HeyGen](heygen.md) para configuración y límites. Instagram, publicación y respuestas siguen pendientes. Los MP4 registrados incluyen adjuntos con `mime_type: video/mp4` y una URL local autenticada; el archivo admite hasta 100 MiB y se comprueban su firma, ruta y pertenencia.
 
 ## MCP
 
@@ -89,6 +93,9 @@ El servidor MCP se monta en `/mcp/` mediante el SDK oficial de Python. Los token
 | `youtube_list_videos` | Misma autorización por agente/proyecto | `max_results` 1–50, `page_token` opcional |
 | `youtube_list_comments` | Misma autorización; valida el vídeo del canal | `video_id` opcional, `max_results` 1–50, `page_token` |
 | `youtube_get_analytics` | Misma autorización por agente/proyecto | `start_date`, `end_date` YYYY-MM-DD, hasta 366 días |
+| `heygen_generate_video` | Cualquier agente con HeyGen habilitado y cuenta asignada | `prompt`, `request_id`; duración, resolución, formato e imagen HTTPS opcionales |
+| `heygen_get_video` | Mismo agente y cuenta asignada del trabajo | `video_id` local; consulta y guarda el MP4 sin regenerar |
+| `heygen_list_videos` | Mismo agente y cuenta asignada | Sin argumentos; hasta 50 trabajos locales |
 
 Las herramientas se filtran en la configuración Hermes y se autorizan de nuevo en el servidor. Que `create_ux_agent` devuelva un perfil y trabajo en cola no significa que su contenedor esté listo; consulta el runtime.
 

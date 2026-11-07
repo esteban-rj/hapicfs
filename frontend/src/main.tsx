@@ -31,6 +31,7 @@ import {
   put,
   agentRoles,
   imageUrl,
+  videoUrl,
   type Agent,
   type Capabilities,
   type FileNode,
@@ -48,6 +49,7 @@ import {
   Tree,
   CreateAgentModal,
   ImagePreview,
+  VideoPreview,
 } from "./components";
 import "./style.css";
 import { ModelSelect } from "./ModelSelect";
@@ -88,7 +90,7 @@ function App() {
     path: string;
     content: string;
     size: number;
-    media_type?: "image" | "text";
+    media_type?: "image" | "video" | "text";
   }>();
   const [runtime, setRuntime] = useState<any>();
   const [events, setEvents] = useState<any[]>([]);
@@ -285,8 +287,8 @@ function App() {
     });
   }
   async function readFile(n: FileNode) {
-    if (n.media_type === "image") {
-      setFile({ path: n.path, content: "", size: n.size || 0, media_type: "image" });
+    if (n.media_type === "image" || n.media_type === "video") {
+      setFile({ path: n.path, content: "", size: n.size || 0, media_type: n.media_type });
       return;
     }
     await action(async () =>
@@ -860,7 +862,7 @@ function App() {
                           ) : null}
                         </div>
                         {file ? (
-                          file.media_type === "image" ? <ImagePreview key={file.path} src={imageUrl(projectId, file.path)} alt={file.path.split("/").pop() || "Imagen del proyecto"} download={imageUrl(projectId, file.path, true)} /> : <pre>{file.content}</pre>
+                          file.media_type === "video" ? <VideoPreview key={file.path} src={videoUrl(projectId, file.path)} name={file.path.split("/").pop() || "Vídeo del proyecto"} download={videoUrl(projectId, file.path, true)} /> : file.media_type === "image" ? <ImagePreview key={file.path} src={imageUrl(projectId, file.path)} alt={file.path.split("/").pop() || "Imagen del proyecto"} download={imageUrl(projectId, file.path, true)} /> : <pre>{file.content}</pre>
                         ) : (
                           <Empty
                             icon={<FileText size={28} />}

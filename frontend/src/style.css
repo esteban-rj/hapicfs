@@ -2151,6 +2151,13 @@ textarea::placeholder {
 .tool-disconnect p { margin-bottom: 12px; }
 .tool-preview-footer { margin-top: 18px; color: #888; font-size: 10px; }
 .tool-videos td:first-child { min-width: 200px; }
+.heygen-key-form { margin-bottom: 24px; }
+.heygen-key-form .button-row { flex-wrap: wrap; align-items: center; }
+.heygen-key-form .text-button { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; }
+.heygen-jobs-heading { margin-top: 28px; }
+.heygen-videos { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 300px), 1fr)); gap: 16px; }
+.heygen-videos .tool-connection { min-width: 0; margin-bottom: 0; }
+.video-preview video { display: block; width: 100%; max-height: 540px; border-radius: 6px; background: #111; }
 @media (max-width: 760px) {
   .tool-body { padding: 18px; }
   .tool-workspace, .tool-connect-row { align-items: stretch; flex-direction: column; gap: 12px; }

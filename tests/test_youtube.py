@@ -160,7 +160,7 @@ def test_oauth_pkce_session_state_replay_and_channel_identity(youtube_env):
     assert len([r for r in provider.requests if r.url.path == "/token"]) == 1
     result = client.get(f"/api/projects/{project['id']}/tools").json()
     assert result["connections"][0]["account_id"] == CHANNEL
-    assert next(a for a in result["assignments"] if a["agent_id"] == manager["id"])["connection_id"] == result["connections"][0]["id"]
+    assert next(a for a in result["assignments"] if a["agent_id"] == manager["id"] and a["tool_id"] == "youtube")["connection_id"] == result["connections"][0]["id"]
     assert ACCESS not in json.dumps(result) and REFRESH not in json.dumps(result)
     assert ACCESS.encode() not in (application.state.store.root / "platform.db").read_bytes()
     encrypted = application.state.store.secrets_dir / (result["connections"][0]["id"] + "-oauth.enc")

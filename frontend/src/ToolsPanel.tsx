@@ -1,6 +1,7 @@
 import { useEffect, useState, type ChangeEvent, type FormEvent } from "react";
 import { Check, ExternalLink, Link2, LoaderCircle, RefreshCw, ShieldCheck, Unplug, Youtube } from "lucide-react";
 import { api, post, put, agentRoles, type Agent, type Connection, type IntegrationTool, type Project, type ProjectTools, type ToolAssignment, type YouTubeSettings, type YouTubeVideos } from "./api";
+import { HeyGenPanel } from "./HeyGenPanel";
 
 type Props = {
   projects: Project[];
@@ -27,13 +28,13 @@ function AssignmentForm({ agent, tool, binding, connections, busy, onSave }: {
       <input id={labelId} type="checkbox" checked={enabled} disabled={busy} onChange={(event) => setEnabled(event.target.checked)} />
       Habilitar {tool.name}
     </label>
-    <label htmlFor={`${labelId}-connection`}>Canal para {agent.name}</label>
+    <label htmlFor={`${labelId}-connection`}>{tool.provider === "youtube" ? "Canal" : "Cuenta"} para {agent.name}</label>
     <select id={`${labelId}-connection`} value={connectionId} disabled={busy || !enabled} onChange={(event) => setConnectionId(event.target.value)}>
-      <option value="">Seleccionar canal</option>
+      <option value="">Seleccionar {tool.provider === "youtube" ? "canal" : "cuenta"}</option>
       {connections.filter((item) => item.provider === tool.provider).map((item) => <option key={item.id} value={item.id}>{item.account_name}{item.status !== "connected" ? " · Reconectar" : ""}</option>)}
     </select>
     <div className="tool-assignment-footer">
-      <span>{!enabled ? "Deshabilitada" : connectionId ? "Solo lectura" : "Pendiente de canal"}</span>
+      <span>{!enabled ? "Deshabilitada" : connectionId ? tool.access === "read" ? "Solo lectura" : "Generación facturable" : "Pendiente de conexión"}</span>
       <button className="secondary" disabled={busy || !changed} type="submit"><Check size={14} /> Guardar</button>
     </div>
   </form>;
@@ -148,8 +149,8 @@ export function ToolsPanel({ projects, agents, selectedProjectId, onSelectProjec
           </button>
         </div>
         {projectId && !data ? <p role="status">Cargando conexiones…</p> : null}
-        {data && !data.connections.length ? <div className="tool-empty">Todavía no hay un canal conectado a este proyecto.</div> : null}
-        {data?.connections.map((connection) => <div key={connection.id} className="tool-connection">
+        {data && !data.connections.some((item) => item.provider === "youtube") ? <div className="tool-empty">Todavía no hay un canal conectado a este proyecto.</div> : null}
+        {data?.connections.filter((item) => item.provider === "youtube").map((connection) => <div key={connection.id} className="tool-connection">
           <div className="tool-channel-heading">
             <div><strong>{connection.account_name}</strong><span className="tool-channel-id">{connection.account_id}</span></div>
             <span className={`tool-status ${connection.status === "connected" ? "connected" : ""}`}>{connection.status === "connected" ? "Conectado" : "Volver a autorizar"}</span>
@@ -176,6 +177,8 @@ export function ToolsPanel({ projects, agents, selectedProjectId, onSelectProjec
       </div>
     </section>
 
+    <HeyGenPanel key={projectId} projectId={projectId} agents={projectAgents} connections={data?.connections.filter((item) => item.provider === "heygen") || []} busy={busy} run={run} onChanged={async (message) => { await reloadProject(projectId); setNotice(message); }} />
+
     {visiblePreview ? <section className="card tool-videos" aria-label="Vídeos de YouTube">
       <div className="card-title"><Youtube size={17} />Vídeos del canal<span className="muted">Consulta real</span></div>
       <div className="tool-body">
@@ -194,7 +197,7 @@ export function ToolsPanel({ projects, agents, selectedProjectId, onSelectProjec
     <section className="card tool-agent-section">
       <div className="card-title"><ShieldCheck size={17} />Herramientas por agente</div>
       <div className="tool-body">
-        <p>Todos los agentes pueden integrar las herramientas del catálogo. Community Manager incluye YouTube preseleccionado; asigna un canal para que pueda consultarlo.</p>
+        <p>Todos los agentes pueden integrar las herramientas del catálogo. Community Manager incluye YouTube y HeyGen preseleccionados; asigna un canal o cuenta para habilitar su uso.</p>
         {!projectAgents.length ? <div className="tool-empty">Los agentes de tu proyecto aparecerán aquí.</div> : !data || !catalog.length ? <p role="status">Cargando asignaciones…</p> : <div className="tool-assignment-grid">
           {projectAgents.flatMap((agent) => catalog.map((tool) => {
             const binding = data.assignments.find((item) => item.agent_id === agent.id && item.tool_id === tool.id);

@@ -59,11 +59,21 @@ class Store:
             CREATE TABLE IF NOT EXISTS oauth_states(
                 state_hash TEXT PRIMARY KEY,session_hash TEXT NOT NULL,project_id TEXT NOT NULL REFERENCES projects(id),
                 verifier TEXT NOT NULL,redirect_uri TEXT NOT NULL,client_fingerprint TEXT NOT NULL,expires_at INTEGER NOT NULL);
+            CREATE TABLE IF NOT EXISTS video_jobs(
+                id TEXT PRIMARY KEY,project_id TEXT NOT NULL REFERENCES projects(id),
+                agent_id TEXT NOT NULL REFERENCES agents(id),connection_id TEXT NOT NULL REFERENCES connections(id),
+                request_id TEXT NOT NULL,payload TEXT NOT NULL,provider_video_id TEXT,status TEXT NOT NULL,
+                estimated_cost_usd TEXT NOT NULL,path TEXT,message_id INTEGER REFERENCES messages(id),error TEXT,
+                created_at TEXT NOT NULL,updated_at TEXT NOT NULL,UNIQUE(agent_id,request_id));
             INSERT OR IGNORE INTO agent_tools(agent_id,tool_id,enabled)
                 SELECT id,'youtube',1 FROM agents WHERE kind='community-manager';
+            INSERT OR IGNORE INTO agent_tools(agent_id,tool_id,enabled)
+                SELECT id,'heygen',1 FROM agents WHERE kind='community-manager';
             ''')
             if "planner_id" not in {row[1] for row in db.execute("PRAGMA table_info(agents)")}:
                 db.execute("ALTER TABLE agents ADD COLUMN planner_id TEXT REFERENCES agents(id)")
+            if "credential_fingerprint" not in {row[1] for row in db.execute("PRAGMA table_info(video_jobs)")}:
+                db.execute("ALTER TABLE video_jobs ADD COLUMN credential_fingerprint TEXT")
 
     @contextmanager
     def db(self):

@@ -20,6 +20,7 @@ import {
   put,
   agentRoles,
   imageUrl,
+  videoUrl,
   type Agent,
   type Message,
   type Project,
@@ -244,6 +245,14 @@ export function ImagePreview({ src, alt, download }: { src: string; alt: string;
   </figure>;
 }
 
+export function VideoPreview({ src, name, download }: { src: string; name: string; download: string }) {
+  const [failed, setFailed] = useState(false);
+  return <figure className="image-preview video-preview">
+    {failed ? <p role="alert">No se pudo cargar el vídeo. Comprueba que el archivo siga en el workspace.</p> : <video controls preload="metadata" src={src} aria-label={name} onError={() => setFailed(true)} />}
+    <figcaption><span>{name}</span><a href={download} download>Descargar MP4</a></figcaption>
+  </figure>;
+}
+
 function MessageContent({ message, agent }: { message: Message; agent: Agent }) {
   // Render local workspace image references only; no HTML or arbitrary remote requests.
   const pieces = message.content.split(/(!\[[^\]]*\]\([^)]+\))/g);
@@ -257,7 +266,7 @@ function MessageContent({ message, agent }: { message: Message; agent: Agent }) 
       const path = relative.startsWith("agents/") || relative.startsWith("workspace/") ? relative : `agents/${agent.id}/workspace/${relative}`;
       return <ImagePreview key={path} src={imageUrl(agent.project_id, path)} alt={match[1] || relative} download={imageUrl(agent.project_id, path, true)} />;
     })}
-    {message.attachments?.map((item) => <ImagePreview key={item.id} src={imageUrl(agent.project_id, item.path)} alt={item.name} download={imageUrl(agent.project_id, item.path, true)} />)}
+    {message.attachments?.map((item) => item.mime_type === "video/mp4" ? <VideoPreview key={item.id} src={videoUrl(agent.project_id, item.path)} name={item.name} download={videoUrl(agent.project_id, item.path, true)} /> : <ImagePreview key={item.id} src={imageUrl(agent.project_id, item.path)} alt={item.name} download={imageUrl(agent.project_id, item.path, true)} />)}
   </>;
 }
 

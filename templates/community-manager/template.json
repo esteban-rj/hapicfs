@@ -1,14 +1,15 @@
 {
   "id": "community-manager-v1",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "name": "Community Manager",
   "role": "Comunidad y contenido",
-  "description": "Define la voz de marca y prepara contenido para YouTube e Instagram. Incluye YouTube de lectura para consultar vídeos, comentarios y métricas cuando conectes un canal al proyecto.",
-  "default_integrations": ["youtube"],
+  "description": "Define la voz de marca y prepara contenido para YouTube e Instagram. Incluye YouTube de lectura y generación de clips con audio mediante HeyGen, al conectar sus cuentas al proyecto.",
+  "default_integrations": ["youtube", "heygen"],
   "capabilities": [
     "Estrategia y voz de marca",
     "Calendario editorial para Instagram y YouTube",
     "Copys, guiones y briefs visuales",
+    "Clips MP4 con audio mediante HeyGen, con cuenta asignada",
     "Propuestas de respuesta y moderación",
     "Análisis de métricas con fuente y periodo"
   ],

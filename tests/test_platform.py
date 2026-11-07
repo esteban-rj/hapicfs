@@ -290,7 +290,7 @@ def test_community_manager_mcp_creation_and_drafts_with_unconnected_youtube(clie
     repeated = service.tool(hapic, "create_specialist_agent", args)
     assert repeated["already_exists"] and repeated["id"] == manager["id"]
     config = yaml.safe_load((store.agent_path(manager) / "hermes/config.yaml").read_text(encoding="utf-8"))
-    assert set(config["mcp_servers"]["hapic"]["tools"]["include"]) == {"project_list_files", "project_read_file", "project_write_file", "youtube_get_channel", "youtube_list_videos", "youtube_list_comments", "youtube_get_analytics"}
+    assert set(config["mcp_servers"]["hapic"]["tools"]["include"]) == {"project_list_files", "project_read_file", "project_write_file", "youtube_get_channel", "youtube_list_videos", "youtube_list_comments", "youtube_get_analytics", "heygen_generate_video", "heygen_get_video", "heygen_list_videos"}
     with pytest.raises(ValueError, match="pendiente de conexión"):
         service.tool(manager, "youtube_get_channel", {})
     draft = "id,fecha,canal,estado\n1,2026-11-06,instagram,borrador\n"

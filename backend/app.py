@@ -144,10 +144,26 @@ def create_app(data_dir: Path | None = None, runtime=None):
         """Informe diario real del canal autorizado. Fechas YYYY-MM-DD, máximo 366 días. Devuelve columnas, unidades, periodo y fecha de consulta; datos ausentes no equivalen a cero."""
         return service.tool(scope(ctx), "youtube_get_analytics", {"start_date": start_date, "end_date": end_date})
 
+    @mcp.tool()
+    def heygen_generate_video(prompt: str, request_id: str, ctx: Context, duration: int = 5, resolution: str = "480p", aspect_ratio: str = "9:16", image_url: str | None = None) -> dict:
+        """Genera UN clip HeyGen con audio, facturable, solo si el usuario lo solicita. 5–15 s; 480p/768p/1080p. El coste estimado por segundo es 0.01/0.018/0.04 USD. request_id único de 8–80 caracteres por pieza; reutiliza el mismo al reintentar con idéntico contenido. image_url opcional HTTPS pública: el vídeo sigue el encuadre de esa imagen. Devuelve un id LOCAL: consúltalo con heygen_get_video, sin volver a generar. No publica en redes."""
+        return service.tool(scope(ctx), "heygen_generate_video", {"prompt": prompt, "request_id": request_id, "duration": duration, "resolution": resolution, "aspect_ratio": aspect_ratio, "image_url": image_url})
+
+    @mcp.tool()
+    def heygen_get_video(video_id: str, ctx: Context) -> dict:
+        """Consulta el id LOCAL de un trabajo HeyGen de este agente. Si termina, guarda el MP4 y lo adjunta al chat. Espera entre consultas. saved=true confirma archivo persistido; un error de descarga se reintenta consultando el mismo id, sin generar otro vídeo."""
+        return service.tool(scope(ctx), "heygen_get_video", {"video_id": video_id})
+
+    @mcp.tool()
+    def heygen_list_videos(ctx: Context) -> dict:
+        """Lista hasta 50 trabajos locales HeyGen del agente y su cuenta autorizada. No genera vídeos ni consulta otros proyectos."""
+        return service.tool(scope(ctx), "heygen_list_videos", {})
+
     @asynccontextmanager
     async def lifespan(app):
         # Interrupted provisioning becomes retryable after a control-plane restart.
         store.execute("UPDATE agents SET status='pending',error='La plataforma se reinició durante la provisión. Comprueba el runtime y reintenta.' WHERE status='provisioning'")
+        store.execute("UPDATE video_jobs SET status='submission_unknown',error='La plataforma se reinició durante el envío. Reutiliza el mismo request_id y contenido para recuperar el trabajo.' WHERE status='submitting'")
         async with mcp.session_manager.run():
             yield
 
@@ -255,6 +271,18 @@ def create_app(data_dir: Path | None = None, runtime=None):
     def authorize_youtube(project_id: str, request: Request):
         return service.youtube.authorize(project_id, request.cookies["hapic_session"], str(request.base_url))
 
+    @app.post("/api/projects/{project_id}/connections/heygen")
+    def connect_heygen(project_id: str, body: KeyInput):
+        return service.heygen.connect(project_id, body.api_key)
+
+    @app.get("/api/projects/{project_id}/heygen/videos")
+    def heygen_videos(project_id: str):
+        return service.heygen.list_jobs(project_id)
+
+    @app.post("/api/projects/{project_id}/heygen/videos/{video_id}/refresh")
+    def refresh_heygen_video(project_id: str, video_id: str):
+        return service.heygen.get(project_id, video_id)
+
     @app.get(CALLBACK_PATH)
     def youtube_callback(request: Request):
         try:
@@ -267,8 +295,8 @@ def create_app(data_dir: Path | None = None, runtime=None):
         return RedirectResponse("/?" + urlencode(query), status_code=303)
 
     @app.delete("/api/projects/{project_id}/connections/{connection_id}")
-    def disconnect_youtube(project_id: str, connection_id: str):
-        return service.youtube.disconnect(project_id, connection_id)
+    def disconnect_connection(project_id: str, connection_id: str):
+        return service.disconnect(project_id, connection_id)
 
     @app.get("/api/projects/{project_id}/connections/{connection_id}/videos")
     def youtube_videos(project_id: str, connection_id: str, page_token: str | None = None):
@@ -371,6 +399,11 @@ def create_app(data_dir: Path | None = None, runtime=None):
     @app.get("/api/projects/{project_id}/image")
     def read_image(project_id: str, path: str, download: bool = False):
         file, mime = service.image_file(project_id, path)
+        return FileResponse(file, media_type=mime, filename=file.name, content_disposition_type="attachment" if download else "inline")
+
+    @app.get("/api/projects/{project_id}/video")
+    def read_video(project_id: str, path: str, download: bool = False):
+        file, mime = service.video_file(project_id, path)
         return FileResponse(file, media_type=mime, filename=file.name, content_disposition_type="attachment" if download else "inline")
 
     @app.put("/api/settings/model")
