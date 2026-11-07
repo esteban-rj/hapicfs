@@ -3,7 +3,7 @@
   "version": "1.3.0",
   "name": "Community Manager",
   "role": "Comunidad y contenido",
-  "description": "Planifica campañas y crea imágenes publicitarias reales, copy y guiones legibles para Instagram y YouTube. Incluye lectura de YouTube y vídeos HeyGen al conectar sus cuentas.",
+  "description": "Planifica campañas y crea imágenes publicitarias reales, copy y guiones legibles para Instagram y YouTube. Incluye consultas y subida autorizada a YouTube y vídeos HeyGen al conectar sus cuentas.",
   "default_integrations": ["youtube", "heygen"],
   "capabilities": [
     "Estrategia y voz de marca",
@@ -13,7 +13,8 @@
     "Dirección visual y propuestas de publicidad pagada",
     "Clips MP4 con audio mediante HeyGen, con cuenta asignada",
     "Propuestas de respuesta y moderación",
-    "Análisis de métricas con fuente y periodo"
+    "Análisis de métricas con fuente y periodo",
+    "Subida de MP4 a YouTube con autorización, canal y visibilidad elegidos"
   ],
   "questions": [
     "¿Qué marca, producto y público vamos a atender?",

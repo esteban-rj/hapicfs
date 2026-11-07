@@ -68,6 +68,9 @@ class Authentication:
             raise HTTPException(401, "Usuario o contraseña incorrectos.")
         with self.lock:
             self.attempts.pop(address, None)
+        return self.issue_session(previous_token)
+
+    def issue_session(self, previous_token: str = ""):
         session = {"token": secrets.token_urlsafe(32), "csrf": secrets.token_urlsafe(32), "created_at": now(),
                    "expires_at": int(time.time()) + SESSION_SECONDS, "credential_fingerprint": self.fingerprint}
         with self.store.db() as db:

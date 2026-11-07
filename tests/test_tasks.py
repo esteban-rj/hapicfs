@@ -214,6 +214,21 @@ def test_recovery_delivers_a_named_existing_image_without_generating_it_again(tm
     assert any(item['path'] == 'images/existing.png' for item in json.loads(result['result'])['evidence'])
 
 
+def test_coordinator_inspects_real_progress_after_a_failed_task(tmp_path):
+    service, hapic, ux, _ = setup(tmp_path)
+    task = service.tasks.create(hapic, ux['id'], 'Probar', '', [], ['cierre.md'])
+    root = service.store.agent_path(ux) / 'workspace'
+    (root / 'cierre.md').write_text('Pruebas locales ejecutadas; publicación pendiente.', encoding='utf-8')
+    service.store.execute("UPDATE tasks SET state='failed' WHERE id=?", (task['id'],))
+    result = service.tasks.inspect(hapic, task['id'])
+    assert result['files'][0]['available']
+    assert 'publicación pendiente' in result['files'][0]['content']
+    foreign = service.create_project(hapic['organization_id'], 'Other')
+    other_hapic = service.store.one("SELECT * FROM agents WHERE project_id=? AND kind='hapic'", (foreign['id'],))
+    with pytest.raises(LookupError):
+        service.tasks.inspect(other_hapic, task['id'])
+
+
 def test_queue_bounds_parallel_work_and_timeout_is_ten_minutes(tmp_path):
     import threading
     from backend.tasks import TASK_TIMEOUT_SECONDS

@@ -34,7 +34,7 @@ function AssignmentForm({ agent, tool, binding, connections, busy, onSave }: {
       {connections.filter((item) => item.provider === tool.provider).map((item) => <option key={item.id} value={item.id}>{item.account_name}{item.status !== "connected" ? " · Reconectar" : ""}</option>)}
     </select></> : <p>Workspace propio · Python y Node · ejecución en Docker</p>}
     <div className="tool-assignment-footer">
-      <span>{!enabled ? "Deshabilitada" : !tool.requires_connection ? "Ejecución habilitada" : connectionId ? tool.access === "read" ? "Solo lectura" : "Generación facturable" : "Pendiente de conexión"}</span>
+      <span>{!enabled ? "Deshabilitada" : !tool.requires_connection ? "Ejecución habilitada" : connectionId ? tool.provider === "youtube" ? "Lectura y subida autorizada" : tool.access === "read" ? "Solo lectura" : "Generación facturable" : "Pendiente de conexión"}</span>
       <button className="secondary" disabled={busy || !changed} type="submit"><Check size={14} /> Guardar</button>
     </div>
   </form>;
@@ -129,11 +129,11 @@ export function ToolsPanel({ projects, agents, selectedProjectId, onSelectProjec
     </section>)}
 
     <section className="card tool-integration">
-      <div className="card-title"><Youtube size={20} /><strong>YouTube</strong><span className="tag">Solo lectura</span></div>
+      <div className="card-title"><Youtube size={20} /><strong>YouTube</strong><span className="tag">Lectura y subida</span></div>
       <div className="tool-body">
         <h2>Tu canal, conectado a tu equipo.</h2>
-        <p>Consulta vídeos, comentarios y rendimiento con cualquiera de tus agentes. Elige qué canal puede usar cada uno.</p>
-        <div className="tool-features"><span>Canal</span><span>Vídeos</span><span>Comentarios</span><span>Métricas</span></div>
+        <p>Consulta el canal y permite que tus agentes suban vídeos guardados cuando lo autorices. Elige qué canal puede usar cada uno.</p>
+        <div className="tool-features"><span>Canal</span><span>Vídeos</span><span>Comentarios</span><span>Métricas</span><span>Subida autorizada</span></div>
 
         {settings?.source === "file" ? <div className="tool-server-credentials">
           <div><ShieldCheck size={16} /><strong>Configuración administrada por el servidor</strong><span>{settings.configured ? "Disponible" : "Pendiente de revisión"}</span></div>
@@ -168,7 +168,7 @@ export function ToolsPanel({ projects, agents, selectedProjectId, onSelectProjec
               const result = await api<YouTubeVideos>(`/projects/${projectId}/connections/${connection.id}/videos`);
               setPreview({ projectId, connectionId: connection.id, data: result });
             }); }}>Ver vídeos</button>
-            {connection.status !== "connected" ? <button type="button" className="secondary" disabled={busy} onClick={() => { void connect(); }}><RefreshCw size={14} />Reconectar</button> : null}
+            {connection.status !== "connected" || !connection.scopes.includes("https://www.googleapis.com/auth/youtube.upload") ? <button type="button" className="secondary" disabled={busy} onClick={() => { void connect(); }}><RefreshCw size={14} />{connection.status === "connected" ? "Autorizar subida" : "Reconectar"}</button> : null}
             <a href={`https://studio.youtube.com/channel/${connection.account_id}`} target="_blank" rel="noreferrer" className="text-button">YouTube Studio <ExternalLink size={12} /></a>
             <button type="button" className="text-button" disabled={busy} onClick={() => setDisconnectId(connection.id)}><Unplug size={13} />Desconectar</button>
           </div>

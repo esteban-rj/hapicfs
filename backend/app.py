@@ -61,11 +61,6 @@ class ToolInput(BaseModel):
     connection_id: str | None = Field(default=None, max_length=80)
 
 
-class LoginInput(BaseModel):
-    username: str = Field(min_length=1, max_length=80)
-    password: str = Field(min_length=1, max_length=256, repr=False)
-
-
 def create_app(data_dir: Path | None = None, runtime=None):
     store = Store(data_dir or Path(os.getenv("HAPIC_DATA_DIR", str(ROOT / ".hapic"))))
     auth = Authentication(store)
@@ -106,6 +101,11 @@ def create_app(data_dir: Path | None = None, runtime=None):
     def list_tasks(ctx: Context) -> dict:
         """Consulta tareas persistentes. delivered comprueba archivos, no funcionalidad. running tras interrupción requiere inspección, sin replay automático."""
         return {"tasks": service.tasks.list(scope(ctx))}
+
+    @mcp.tool()
+    def inspect_task(task_id: str, ctx: Context) -> dict:
+        """Hapic inspecciona archivos esperados y reportes REALES de una tarea de su proyecto, incluso si falló o agotó tiempo. Incluye presencia, tamaño, hash si es pequeño y texto de informes acotados. No da acceso a perfiles, secretos, otros proyectos ni archivos arbitrarios. Usa esta evidencia antes de recuperar y evita repetir pruebas/medios ya hechos."""
+        return service.tasks.inspect(scope(ctx), task_id)
 
     @mcp.tool()
     async def run_task(task_id: str, ctx: Context) -> dict:
@@ -193,6 +193,16 @@ def create_app(data_dir: Path | None = None, runtime=None):
         return service.tool(scope(ctx), "youtube_get_analytics", {"start_date": start_date, "end_date": end_date})
 
     @mcp.tool()
+    def youtube_upload_video(path: str, title: str, description: str, request_id: str, ctx: Context, visibility: str = "private", user_approved: bool = False, contains_synthetic_media: bool = True) -> dict:
+        """Sube UN MP4 real del workspace de ESTE agente al canal YouTube asignado. Requiere OAuth youtube.upload y petición/autorización del usuario, user_approved=true. Aclara título, descripción y private/unlisted/public antes de publicar; private por defecto. Para HeyGen declara contains_synthetic_media=true. request_id único por publicación: conserva el mismo con idénticos datos ante dudas, nunca crees otro para reintentar. Guarda el ID local y consulta youtube_get_upload; una subida recibida no garantiza visibilidad pública ni procesamiento terminado. No regenera vídeos ni permite rutas de otros agentes."""
+        return service.tool(scope(ctx), "youtube_upload_video", {"path": path, "title": title, "description": description, "request_id": request_id, "visibility": visibility, "user_approved": user_approved, "contains_synthetic_media": contains_synthetic_media})
+
+    @mcp.tool()
+    def youtube_get_upload(upload_id: str, ctx: Context) -> dict:
+        """Consulta y recupera la MISMA subida autorizada del agente/canal, sin crear otro vídeo ni cambiar su visibilidad. Conserva el ID ante un timeout. published=true verifica privacidad public y uploadStatus processed; si no, informa procesamiento, visibilidad real o bloqueo."""
+        return service.tool(scope(ctx), "youtube_get_upload", {"upload_id": upload_id})
+
+    @mcp.tool()
     def heygen_generate_video(prompt: str, request_id: str, ctx: Context, duration: int = 5, resolution: str = "480p", aspect_ratio: str = "9:16", image_url: str | None = None) -> dict:
         """Genera UN clip HeyGen con audio, facturable, solo si el usuario lo solicita. 5–15 s; 480p/768p/1080p. El coste estimado por segundo es 0.01/0.018/0.04 USD. request_id único de 8–80 caracteres por pieza; reutiliza el mismo al reintentar con idéntico contenido. image_url opcional HTTPS pública: el vídeo sigue el encuadre de esa imagen. Devuelve un id LOCAL: consúltalo con heygen_get_video, sin volver a generar. No publica en redes."""
         return service.tool(scope(ctx), "heygen_generate_video", {"prompt": prompt, "request_id": request_id, "duration": duration, "resolution": resolution, "aspect_ratio": aspect_ratio, "image_url": image_url})
@@ -249,10 +259,10 @@ def create_app(data_dir: Path | None = None, runtime=None):
                     origin = request.headers.get("origin")
                     if request.headers.get("sec-fetch-site") == "cross-site" or (origin and (urlparse(origin).netloc != request.headers.get("host") or urlparse(origin).scheme != request.url.scheme)):
                         return JSONResponse({"detail": "Origen no autorizado."}, status_code=403)
-                if path not in {"/api/auth/login", "/api/health"}:
+                if path not in {"/api/health", "/api/bootstrap"}:
                     session = auth.session(request.cookies.get("hapic_session", ""))
                     if not session:
-                        return JSONResponse({"detail": "Inicia sesión para acceder a la plataforma."}, status_code=401, headers={"Cache-Control": "no-store"})
+                        return JSONResponse({"detail": "Recarga la página para abrir tu espacio."}, status_code=401, headers={"Cache-Control": "no-store"})
                     request.state.session = session
                     if request.method not in {"GET", "HEAD", "OPTIONS"}:
                         if not secrets.compare_digest(request.headers.get("x-hapic-csrf", ""), session["csrf"]):
@@ -269,6 +279,12 @@ def create_app(data_dir: Path | None = None, runtime=None):
     @app.exception_handler(ValueError)
     async def value_error(request, exc):
         return JSONResponse({"detail": str(exc)}, status_code=400)
+
+    @app.exception_handler(Exception)
+    async def unexpected_error(request, exc):
+        logging.getLogger(__name__).error("Unhandled %s on %s", type(exc).__name__, request.url.path)
+        return JSONResponse({"detail": "Ocurrió un error interno en el servidor. No se ha confirmado la operación; revisa su estado antes de repetirla."}, status_code=500,
+                            headers={"Cache-Control": "no-store", "X-Content-Type-Options": "nosniff"})
 
     @app.exception_handler(RequestValidationError)
     async def invalid_request(request, exc):
@@ -292,22 +308,12 @@ def create_app(data_dir: Path | None = None, runtime=None):
         return {"status": "ok", "service": "hapic-control-plane"}
 
     @app.get("/api/bootstrap")
-    def bootstrap(request: Request):
-        return auth.bootstrap(request.state.session)
-
-    @app.post("/api/auth/login")
-    def login(body: LoginInput, request: Request, response: Response):
-        session = auth.login(body.username, body.password, request.client.host if request.client else "unknown",
-                             request.cookies.get("hapic_session", ""))
-        # Google returns via a cross-site top-level GET. Mutations still require CSRF and same-origin checks.
-        response.set_cookie("hapic_session", session["token"], httponly=True, samesite="lax", secure=request.url.scheme == "https", max_age=SESSION_SECONDS)
+    def bootstrap(request: Request, response: Response):
+        session = auth.session(request.cookies.get("hapic_session", ""))
+        if not session:
+            session = auth.issue_session(request.cookies.get("hapic_session", ""))
+            response.set_cookie("hapic_session", session["token"], httponly=True, samesite="lax", secure=request.url.scheme == "https", max_age=SESSION_SECONDS)
         return auth.bootstrap(session)
-
-    @app.post("/api/auth/logout")
-    def logout(request: Request, response: Response):
-        auth.logout(request.cookies["hapic_session"])
-        response.delete_cookie("hapic_session", httponly=True, samesite="lax", secure=request.url.scheme == "https")
-        return {"logged_out": True}
 
     @app.get("/api/state")
     def state():

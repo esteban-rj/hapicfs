@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 import hashlib
 import re
 import shutil
@@ -68,6 +69,8 @@ class Service:
         self.images = ImageGenerator()
         self.voice = VoiceTranscriber()
         self.youtube = YouTube(store, self.project)
+        from .youtube_uploads import YouTubeUploads
+        self.youtube_uploads = YouTubeUploads(self)
         self.heygen = HeyGen(store, self.project)
         self.locks = {}
         self.locks_guard = threading.Lock()
@@ -331,6 +334,12 @@ class Service:
             binding = self.store.one("SELECT * FROM agent_tools WHERE agent_id=? AND tool_id='youtube' AND enabled=1", (agent["id"],))
             if not binding or not binding["connection_id"]:
                 raise ValueError("YouTube está pendiente de conexión. Selecciona un canal en Herramientas para este agente.")
+            if name == "youtube_upload_video":
+                if args.get("user_approved") is not True:
+                    raise PermissionError("La subida requiere autorización explícita del usuario y su visibilidad elegida.")
+                return self.youtube_uploads.upload(agent, binding["connection_id"], **args)
+            if name == "youtube_get_upload":
+                return self.youtube_uploads.get(agent, binding["connection_id"], args["upload_id"])
             result = self.youtube.run(project["id"], binding["connection_id"], name, args)
             self.store.event(agent["id"], f"YouTube: consulta {name} completada en el canal autorizado.")
             return result
@@ -416,15 +425,23 @@ class Service:
         root = self.store.agent_path(agent) / "workspace"
         if name == "project_list_files":
             files = []
-            for p in root.rglob("*"):
-                if len(files) >= 300:
-                    break
-                try:
-                    safe_path(root, p.relative_to(root).as_posix(), image=p.suffix.lower() in IMAGE_TYPES, video=p.suffix.lower() == ".mp4")
-                    files.append(p.relative_to(root).as_posix())
-                except ValueError:
-                    continue
+            for directory, dirs, names in os.walk(root, followlinks=False):
+                dirs[:] = [name for name in dirs if not name.startswith('.') and name not in HIDDEN_NAMES and name != '__pycache__'
+                           and not (Path(directory) / name).is_symlink() and not getattr(Path(directory) / name, 'is_junction', lambda: False)()]
+                for filename in names:
+                    p = Path(directory) / filename
+                    try:
+                        safe_path(root, p.relative_to(root).as_posix(), image=p.suffix.lower() in IMAGE_TYPES, video=p.suffix.lower() == ".mp4")
+                        files.append(p.relative_to(root).as_posix())
+                    except ValueError:
+                        continue
+                    if len(files) >= 300:
+                        return {"files": files, "truncated": True}
             return {"files": files}
+        if name == "project_read_file":
+            candidate = safe_path(root, args["path"], writing=True)
+            if not candidate.exists():
+                return {"path": args["path"], "exists": False, "message": "El archivo no existe. Consulta project_list_files y conserva los avances; no repitas lecturas de rutas inventadas."}
         path = safe_path(root, args["path"], writing=name == "project_write_file")
         if name == "project_read_file":
             return {"path": args["path"], "content": path.read_text(encoding="utf-8")}

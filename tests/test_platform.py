@@ -27,6 +27,36 @@ class TestRuntime(DockerRuntime):
         return {"status": agent["status"], "ready": False}
 
 
+def test_unexpected_api_errors_are_json_without_internal_details(client, app):
+    @app.get('/api/test-unexpected-error')
+    def failing_route():
+        raise RuntimeError('private-debug-details')
+    app.router.routes.insert(0, app.router.routes.pop())
+    probe = TestClient(app, base_url='http://localhost', cookies=client.cookies, raise_server_exceptions=False)
+    response = probe.get('/api/test-unexpected-error')
+    assert response.status_code == 500
+    assert response.headers['content-type'].startswith('application/json')
+    assert 'private-debug-details' not in response.text
+    assert 'estado antes de repetirla' in response.json()['detail']
+
+
+def test_workspace_inventory_skips_dependencies_and_missing_files_are_data(app):
+    service = app.state.service
+    org = service.create_org('Inventory')
+    project = service.create_project(org['id'], 'Code')
+    agent = service.create_agent(project['id'], 'UX', 'ux')
+    root = service.store.agent_path(agent) / 'workspace'
+    (root / 'index.ts').write_text('const value = 1')
+    for directory in ['node_modules/package', '.npm-cache/content', '__pycache__']:
+        path = root / directory
+        path.mkdir(parents=True)
+        (path / 'ignored.js').write_text('ignore')
+    assert service.tool(agent, 'project_list_files', {}) == {'files': ['index.ts']}
+    assert service.tool(agent, 'project_read_file', {'path': 'missing.md'})['exists'] is False
+    with pytest.raises(ValueError):
+        service.tool(agent, 'project_read_file', {'path': '../private.md'})
+
+
 @pytest.fixture
 def app(tmp_path, monkeypatch):
     monkeypatch.delenv("OPENAI_API_KEY", raising=False)
@@ -361,7 +391,7 @@ def test_docker_lifecycle_contract_and_readiness(client, app, monkeypatch):
     config = yaml.safe_load((store.agent_path(agent) / "hermes/config.yaml").read_text())
     assert config["platform_toolsets"]["api_server"] == ["memory", "hapic"]
     assert store.api_key() not in json.dumps(config)
-    with patch.object(runtime, "client", return_value=sdk), patch("backend.runtime.httpx.get", return_value=httpx.Response(200, json={"status": "degraded"})), patch("backend.runtime.time.sleep"):
+    with patch.object(runtime, "startup_timeout", 0.01), patch.object(runtime, "client", return_value=sdk), patch("backend.runtime.httpx.get", return_value=httpx.Response(200, json={"status": "degraded"})), patch("backend.runtime.time.sleep"):
         with pytest.raises(RuntimeUnavailable, match="aún no está lista"):
             runtime.start(agent, store)
 
@@ -407,7 +437,7 @@ def test_community_manager_mcp_creation_and_drafts_with_unconnected_youtube(clie
     repeated = service.tool(hapic, "create_specialist_agent", args)
     assert repeated["already_exists"] and repeated["id"] == manager["id"]
     config = yaml.safe_load((store.agent_path(manager) / "hermes/config.yaml").read_text(encoding="utf-8"))
-    assert set(config["mcp_servers"]["hapic"]["tools"]["include"]) == {"project_list_files", "project_read_file", "project_write_file", "generate_project_image", "youtube_get_channel", "youtube_list_videos", "youtube_list_comments", "youtube_get_analytics", "heygen_generate_video", "heygen_get_video", "heygen_list_videos"}
+    assert set(config["mcp_servers"]["hapic"]["tools"]["include"]) == {"project_list_files", "project_read_file", "project_write_file", "generate_project_image", "youtube_get_channel", "youtube_list_videos", "youtube_list_comments", "youtube_get_analytics", "youtube_upload_video", "youtube_get_upload", "heygen_generate_video", "heygen_get_video", "heygen_list_videos"}
     with pytest.raises(ValueError, match="pendiente de conexión"):
         service.tool(manager, "youtube_get_channel", {})
     draft = "id,fecha,canal,estado\n1,2026-11-06,instagram,borrador\n"

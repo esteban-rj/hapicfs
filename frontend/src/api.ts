@@ -74,22 +74,6 @@ export const post = <T = any>(path: string, body?: unknown) =>
 export const put = <T = any>(path: string, body: unknown) =>
   api<T>(path, { method: "PUT", body: JSON.stringify(body) });
 
-export async function login(username: string, password: string) {
-  const session = await post<Session>("/auth/login", { username, password });
-  csrf = session.csrf;
-  bootstrapPromise = Promise.resolve(session);
-  return session;
-}
-
-export async function logout() {
-  try {
-    await post("/auth/logout");
-  } catch (error) {
-    if (!(error instanceof ApiError && error.status === 401)) throw error;
-  }
-  clearSession();
-}
-
 export type Org = { id: string; name: string };
 export type Project = {
   id: string;
@@ -163,7 +147,7 @@ export type IntegrationTool = {
   name: string;
   description: string;
   provider: string;
-  access: "read" | "generate" | "execute";
+  access: "read" | "read-and-upload" | "generate" | "execute";
   requires_connection: boolean;
   actions: string[];
 };

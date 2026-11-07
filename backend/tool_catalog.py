@@ -20,11 +20,11 @@ CATALOG = {
     "youtube": {
         "id": "youtube",
         "name": "YouTube",
-        "description": "Consulta el canal, sus vídeos, comentarios e informes de rendimiento.",
+        "description": "Consulta el canal y sube un MP4 del agente solo con autorización del usuario y permiso OAuth de subida.",
         "provider": "youtube",
-        "access": "read",
+        "access": "read-and-upload",
         "requires_connection": True,
-        "actions": ["youtube_get_channel", "youtube_list_videos", "youtube_list_comments", "youtube_get_analytics"],
+        "actions": ["youtube_get_channel", "youtube_list_videos", "youtube_list_comments", "youtube_get_analytics", "youtube_upload_video", "youtube_get_upload"],
     },
 }
 

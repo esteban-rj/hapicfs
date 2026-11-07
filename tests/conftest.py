@@ -21,9 +21,9 @@ def login_data():
 
 
 @pytest.fixture
-def login(login_data):
-    def sign_in(client, **overrides):
-        response = client.post("/api/auth/login", json={**login_data, **overrides})
+def login():
+    def sign_in(client, **_overrides):
+        response = client.get("/api/bootstrap")
         assert response.status_code == 200, response.text
         client.headers["X-Hapic-CSRF"] = response.json()["csrf"]
         return response

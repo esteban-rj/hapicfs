@@ -22,7 +22,6 @@ import {
   Moon,
   Palette,
   PenTool,
-  LogOut,
   Plus,
   RefreshCw,
   Search,
@@ -86,7 +85,7 @@ const nav = [
   { name: "Herramientas" as Page, icon: Wrench },
   { name: "Configuración" as Page, icon: Settings },
 ];
-function App({ session, onLogout }: { session: Session; onLogout: () => Promise<void> }) {
+function App({ session }: { session: Session }) {
   const [state, setState] = useState<State>();
   const [caps, setCaps] = useState<Capabilities>();
   const [templates, setTemplates] = useState<Template[]>([]);
@@ -549,10 +548,6 @@ function App({ session, onLogout }: { session: Session; onLogout: () => Promise<
         <div className="avatar" title={session.user.name} aria-label={"Sesión de " + session.user.name}>
           {session.user.name.slice(0, 1).toUpperCase()}
         </div>
-        <button className="text-button logout-button" onClick={() => void action(onLogout)} disabled={busy}
-          aria-label="Cerrar sesión" title="Cerrar sesión">
-          <LogOut size={17} /><span>Cerrar sesión</span>
-        </button>
       </header>
       <aside className="sidebar">
         <nav>
@@ -1705,6 +1700,6 @@ function RuntimeCard({ agent, runtime }: { agent: Agent; runtime: any }) {
 }
 createRoot(document.getElementById("root")!).render(
   <React.StrictMode>
-    <AuthGate>{(session, onLogout) => <App session={session} onLogout={onLogout} />}</AuthGate>
+    <AuthGate>{(session) => <App session={session} />}</AuthGate>
   </React.StrictMode>,
 );

@@ -28,7 +28,7 @@ test("valid API responses still load the workspace", async t => {
   assert.deepEqual(await api("/state"), state);
 });
 
-test("expired sessions notify the login screen even when a proxy returns a non-JSON error", async t => {
+test("expired sessions clear the local session even when a proxy returns a non-JSON error", async t => {
   globalThis.window = new EventTarget();
   t.after(() => { delete globalThis.window; });
   let expired = false;

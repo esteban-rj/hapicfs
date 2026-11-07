@@ -1,4 +1,4 @@
-"""Server-side Google OAuth and project-scoped, read-only YouTube operations."""
+"""Server-side Google OAuth and project-scoped YouTube operations."""
 from __future__ import annotations
 
 import base64
@@ -20,10 +20,11 @@ from .runtime import RuntimeUnavailable
 from .storage import now, uid
 
 CALLBACK_PATH = "/api/connections/youtube/callback"
-SCOPES = (
+READ_SCOPES = (
     "https://www.googleapis.com/auth/youtube.readonly",
     "https://www.googleapis.com/auth/yt-analytics.readonly",
 )
+SCOPES = (*READ_SCOPES, "https://www.googleapis.com/auth/youtube.upload")
 AUTH_URL = "https://accounts.google.com/o/oauth2/v2/auth"
 TOKEN_URL = "https://oauth2.googleapis.com/token"
 REVOKE_URL = "https://oauth2.googleapis.com/revoke"
@@ -220,7 +221,7 @@ class YouTube:
         token = self._payload(response)
         scopes = str(token.get("scope", " ".join(SCOPES))).split()
         access = token.get("access_token")
-        if not isinstance(access, str) or not access or not set(SCOPES).issubset(scopes):
+        if not isinstance(access, str) or not access or not set(READ_SCOPES).issubset(scopes):
             raise ValueError("Concede los permisos de lectura del canal y Analytics para completar la conexión.")
         channels = self._api("channels", access, {"part": "snippet", "mine": "true"}).get("items", [])
         if not channels:
@@ -299,7 +300,7 @@ class YouTube:
             if not response.is_success:
                 raise RuntimeUnavailable(f"No se pudo renovar el acceso a YouTube (HTTP {response.status_code}). Inténtalo más tarde.")
             payload = self._payload(response)
-            if "scope" in payload and not set(SCOPES).issubset(str(payload["scope"]).split()):
+            if "scope" in payload and not set(json.loads(current["scopes"])).issubset(str(payload["scope"]).split()):
                 self.store.execute("UPDATE connections SET status='reauthorization_required',updated_at=? WHERE id=?", (now(), current["id"]))
                 raise RuntimeUnavailable("Los permisos de Google cambiaron. Vuelve a conectar el canal.")
             saved = self._token_data(payload, payload.get("refresh_token") or tokens["refresh_token"])
