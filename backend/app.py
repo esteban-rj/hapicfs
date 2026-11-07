@@ -247,6 +247,10 @@ def create_app(data_dir: Path | None = None, runtime=None):
         else:
             host = request.url.hostname
             allowed_local = {"localhost", "127.0.0.1", "::1"}
+            for configured in os.getenv("HAPIC_ALLOWED_HOSTS", "").split(","):
+                cleaned = configured.strip()
+                if cleaned:
+                    allowed_local.add(cleaned)
             try:
                 if host and ipaddress.ip_address(host).is_private:
                     allowed_local.add(host)
