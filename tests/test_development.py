@@ -74,3 +74,29 @@ def test_preview_checks_ownership_before_replacing(setup):
         with pytest.raises(PermissionError):
             service.development.preview(coder, "stop")
     client.containers.get.return_value.remove.assert_not_called()
+
+
+@pytest.mark.parametrize('status_code', [200, 409])
+def test_recovered_runtime_uses_a_new_conversation_and_explains_orphan_errors(setup, status_code):
+    import asyncio
+    import json
+    import httpx
+    from backend.runtime import RuntimeUnavailable
+    service, _, coder = setup
+    service.store.set_setting('runtime-epoch-' + coder['id'], 2)
+    coder['container_id'] = 'isolated-test'
+    runtime = DockerRuntime()
+    def handle(request):
+        payload = json.loads(request.content)
+        assert payload['conversation'] == f"hapic-{coder['id']}-recovery-2"
+        assert request.headers['X-Hermes-Session-Key'].endswith('-recovery-2')
+        if status_code == 409:
+            return httpx.Response(409, json={'error': {'code': 'unknown_execution'}})
+        return httpx.Response(200, json={'status': 'completed', 'output': [{'type': 'message', 'content': [{'type': 'output_text', 'text': 'OK'}]}]})
+    real_client = httpx.AsyncClient
+    with patch.object(runtime, 'client', return_value=MagicMock()), patch.object(runtime, 'url', return_value='http://hermes.test'), patch('backend.runtime.httpx.AsyncClient', side_effect=lambda **kwargs: real_client(transport=httpx.MockTransport(handle), **kwargs)):
+        if status_code == 409:
+            with pytest.raises(RuntimeUnavailable, match='unknown_execution'):
+                asyncio.run(runtime.chat(coder, service.store, 'Diagnóstico', 'request-epoch'))
+        else:
+            assert asyncio.run(runtime.chat(coder, service.store, 'Diagnóstico', 'request-epoch')) == ('OK', 'completed')

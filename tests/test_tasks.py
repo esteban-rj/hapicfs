@@ -159,6 +159,61 @@ def test_queue_waits_for_dependencies_and_runs_automatically(tmp_path):
     assert service.tasks.enqueue(hapic, second['id'])['state'] == 'delivered'
 
 
+def test_video_report_without_mp4_cannot_complete_a_media_task(tmp_path):
+    service, hapic, ux, runtime = setup(tmp_path)
+    task = service.tasks.create(hapic, ux['id'], 'Entregar vídeo', '', [], ['index.html'], expected_videos=1)
+    result = asyncio.run(service.tasks.run(hapic, task['id']))
+    assert result['state'] == 'blocked'
+    evidence = json.loads(result['result'])
+    assert evidence['missing_media'] == {'videos': 1}
+    service.tasks.publish_updates()
+    receipt = next(message for message in service.messages(hapic['id']) if task['id'] in message['content'])
+    assert '1 vídeos MP4' in receipt['content']
+    assert '"missing_media"' not in receipt['content']
+
+
+def test_coordinator_can_recover_only_an_idle_specialist_in_its_project(tmp_path):
+    from unittest.mock import patch
+    from backend.runtime import RuntimeUnavailable
+    service, hapic, ux, runtime = setup(tmp_path)
+    with patch.object(runtime, 'start', return_value={'status': 'running', 'container_id': 'renewed'}) as start:
+        service.lock(ux['id']).acquire()
+        try:
+            with pytest.raises(RuntimeUnavailable):
+                service.tool(hapic, 'restart_specialist_agent', {'agent_id': ux['id']})
+            start.assert_not_called()
+        finally:
+            service.lock(ux['id']).release()
+        root = service.store.agent_path(ux) / 'workspace'
+        (root / 'progress.md').write_text('Conservar')
+        assert service.tool(hapic, 'restart_specialist_agent', {'agent_id': ux['id']})['restarted']
+        assert service.store.setting('runtime-epoch-' + ux['id']) == 1
+        assert (root / 'progress.md').read_text() == 'Conservar'
+        assert not service.lock(ux['id']).locked()
+        with pytest.raises(PermissionError):
+            service.tool(ux, 'restart_specialist_agent', {'agent_id': ux['id']})
+        other = service.create_project(hapic['organization_id'], 'Otro')
+        foreign = service.create_agent(other['id'], 'Otro UX', 'ux')
+        with pytest.raises(PermissionError):
+            service.tool(hapic, 'restart_specialist_agent', {'agent_id': foreign['id']})
+
+
+def test_recovery_delivers_a_named_existing_image_without_generating_it_again(tmp_path):
+    import base64
+    from backend.storage import now
+    service, hapic, ux, runtime = setup(tmp_path)
+    root = service.store.agent_path(ux) / 'workspace'
+    (root / 'images').mkdir()
+    png = base64.b64decode('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+j1ioAAAAASUVORK5CYII=')
+    (root / 'images/existing.png').write_bytes(png)
+    path = f"agents/{ux['id']}/workspace/images/existing.png"
+    service.store.execute('INSERT INTO images VALUES (?,?,?,?,?,?)', ('img-existing', ux['id'], None, path, 'image/png', now()))
+    task = service.tasks.create(hapic, ux['id'], 'Conservar', 'Conserva images/existing.png sin generar otra.', [], ['index.html'], expected_images=1)
+    result = asyncio.run(service.tasks.run(hapic, task['id']))
+    assert result['state'] == 'delivered'
+    assert any(item['path'] == 'images/existing.png' for item in json.loads(result['result'])['evidence'])
+
+
 def test_queue_bounds_parallel_work_and_timeout_is_ten_minutes(tmp_path):
     import threading
     from backend.tasks import TASK_TIMEOUT_SECONDS

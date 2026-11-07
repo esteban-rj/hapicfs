@@ -1,9 +1,13 @@
 """Run code in bounded containers with only the agent workspace mounted."""
 import os
 import threading
+import json
+import re
+import time
 
 import docker
 from docker.types import LogConfig
+import httpx
 
 from .runtime import DockerRuntime, RuntimeUnavailable
 
@@ -106,11 +110,13 @@ class Development:
         if container and (container.labels.get("hapic.development") != agent["id"] or container.labels.get("hapic.installation") != str(self.store.root)):
             raise PermissionError("Ese contenedor no pertenece a este agente e instalación.")
         if action == "stop":
+            self.share(agent, "stop")
             if container:
                 container.remove(force=True)
             return {"status": "stopped"}
         if action == "start":
             self.validate_command(command)
+            self.share(agent, "stop")
             if container:
                 container.remove(force=True)
             # Preview processes expire even if the control plane stops. Restart explicitly.
@@ -125,3 +131,105 @@ class Development:
         return {"status": container.status, "url": f"http://127.0.0.1:{ports[0]['HostPort']}" if ports else None,
                 "output": self.output(container), "expires_after_seconds": 3600,
                 "note": "El proceso debe escuchar en 0.0.0.0:3000. running no garantiza que la página esté lista."}
+
+    @staticmethod
+    def tunnel_url(output):
+        for line in output.splitlines():
+            try:
+                event = json.loads(line)
+            except (ValueError, TypeError):
+                continue
+            if not isinstance(event, dict) or event.get("type") != "v1.tcpip_forward.register.accepted":
+                continue
+            match = re.search(r"https://([a-z0-9-]+\.(?:lhr\.life|lhr\.rocks|localhost\.run))(?![a-z0-9.:-])", str(event.get("data", "")))
+            if match:
+                return match.group(0)
+        return None
+
+    def share(self, agent, action="status", user_approved=False):
+        if action not in {"start", "status", "stop"}:
+            raise ValueError("Usa start, status o stop.")
+        if action == "start" and user_approved is not True:
+            raise ValueError("Pregunta al usuario si quiere poner el juego en línea antes de abrir el túnel.")
+        client = self.runtime.client()
+        labels = {"hapic.development": agent["id"], "hapic.installation": str(self.store.root)}
+
+        def owned(name):
+            try:
+                item = client.containers.get(name)
+            except docker.errors.NotFound:
+                return None
+            if any(item.labels.get(key) != value for key, value in labels.items()):
+                raise PermissionError("Ese contenedor no pertenece a este agente e instalación.")
+            return item
+
+        setting_key = "development-share-" + agent["id"]
+        tunnel = owned("hapic-share-" + agent["id"])
+        if action == "stop":
+            if tunnel:
+                tunnel.remove(force=True)
+                self.store.event(agent["id"], "Enlace público cerrado.")
+            self.store.set_setting(setting_key, None)
+            return {"status": "stopped", "url": None}
+        preview = owned("hapic-preview-" + agent["id"])
+        if not preview or preview.status != "running":
+            if action == "start":
+                raise ValueError("Inicia y prueba primero tu vista previa en 0.0.0.0:3000.")
+            return {"status": "stopped", "url": None}
+        if tunnel and tunnel.labels.get("hapic.preview") != preview.id:
+            if action == "status":
+                return {"status": "stale", "url": None, "note": "La vista previa cambió. Solicita un nuevo enlace."}
+            tunnel.remove(force=True)
+            tunnel = None
+        if tunnel and tunnel.status != "running" and action == "start":
+            tunnel.remove(force=True)
+            tunnel = None
+        if action == "start" and not tunnel:
+            try:
+                tunnel = client.containers.run(
+                    image=os.getenv("HAPIC_RUNNER_IMAGE", "hapic-runner:local"),
+                    command=["timeout", "--signal=KILL", "3600", "ssh", "-T", "-o", "BatchMode=yes",
+                             "-o", "StrictHostKeyChecking=accept-new", "-o", "UserKnownHostsFile=/tmp/known_hosts",
+                             "-o", "IdentityAgent=none", "-o", "IdentitiesOnly=yes", "-o", "ConnectTimeout=15",
+                             "-o", "ServerAliveInterval=30", "-o", "ServerAliveCountMax=3", "-o", "ExitOnForwardFailure=yes",
+                             "-R", "80:127.0.0.1:3000", "nokey@localhost.run", "--", "--output", "json"],
+                    name="hapic-share-" + agent["id"], detach=True, user="10000:10000",
+                    network_mode="container:" + preview.id, environment={"HOME": "/tmp"},
+                    read_only=True, tmpfs={"/tmp": "rw,nosuid,nodev,size=8m"},
+                    cap_drop=["ALL"], security_opt=["no-new-privileges:true"],
+                    mem_limit="96m", nano_cpus=100_000_000, pids_limit=32,
+                    labels={**labels, "hapic.preview": preview.id},
+                    log_config=LogConfig(type="json-file", config={"max-size": "1m", "max-file": "1"}),
+                )
+            except docker.errors.DockerException:
+                raise RuntimeUnavailable("No se pudo iniciar el túnel. Comprueba Docker y reconstruye runner/Dockerfile con SSH habilitado.") from None
+            self.store.event(agent["id"], "Túnel HTTPS solicitado para su vista previa; hasta una hora.")
+            for _ in range(15):
+                tunnel.reload()
+                if self.tunnel_url(self.output(tunnel)) or tunnel.status != "running":
+                    break
+                time.sleep(1)
+        if not tunnel:
+            return {"status": "stopped", "url": None}
+        tunnel.reload()
+        url = None
+        if tunnel.status == "running":
+            saved = self.store.setting(setting_key)
+            if isinstance(saved, dict) and saved.get("container_id") == tunnel.id and saved.get("preview_id") == preview.id:
+                candidate = saved.get("url")
+                if isinstance(candidate, str) and self.tunnel_url(json.dumps({"type": "v1.tcpip_forward.register.accepted", "data": candidate})) == candidate:
+                    url = candidate
+            url = url or self.tunnel_url(self.output(tunnel))
+            if url:
+                self.store.set_setting(setting_key, {"container_id": tunnel.id, "preview_id": preview.id, "url": url})
+        http_status = None
+        if url:
+            try:
+                response = httpx.get(url, timeout=8, follow_redirects=False, trust_env=False)
+                http_status = response.status_code
+            except httpx.HTTPError:
+                pass
+        return {"status": tunnel.status if url else ("starting" if tunnel.status == "running" else "stopped"),
+                "url": url, "http_status": http_status, "http_verified": http_status == 200,
+                "expires_after_seconds": 3600, "preview_id": preview.id,
+                "note": "Enlace temporal del MISMO servidor de la vista previa. Caduca al parar/cambiar la vista previa, el PC o Docker, o como máximo en una hora. El dominio puede cambiar. Verifica QR y dos jugadores usando esta URL; HTTP 200 no prueba el juego. Nunca publiques Hapic ni afirmes haber publicado en redes."}

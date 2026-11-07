@@ -173,11 +173,15 @@ class Service:
         self.store.event(agent["id"], "Perfil persistente creado desde una plantilla limpia. Contenedor pendiente de iniciar.")
         return agent
 
-    def provision(self, agent_id):
-        if not self.lock(agent_id).acquire(blocking=False):
+    def provision(self, agent_id, *, lock_acquired=False, renew_session=False):
+        if not lock_acquired and not self.lock(agent_id).acquire(blocking=False):
             return self.agent(agent_id)
         try:
             agent = self.agent(agent_id)
+            if renew_session:
+                epoch_key = "runtime-epoch-" + agent_id
+                self.store.set_setting(epoch_key, (self.store.setting(epoch_key) or 0) + 1)
+                self.store.event(agent_id, "Hapic solicitó recuperar el runtime y renovar su sesión, conservando archivos y vista previa.")
             self.store.execute("UPDATE agents SET status='provisioning',error=NULL WHERE id=?", (agent_id,))
             self.store.event(agent_id, "Comenzando provisión Docker.")
             try:
@@ -266,8 +270,14 @@ class Service:
                     if self.store.setting("plan-read-" + agent["id"]) != self.architecture_plan(agent)["revision"]:
                         raise ValueError("Lee el plan vigente con get_architecture_plan antes de ejecutar código.")
                 if name == "development_run":
-                    return self.development.run(agent, args["command"], args.get("timeout", 60))
-                return self.development.preview(agent, args.get("action", "status"), args.get("command", ""))
+                    result = self.development.run(agent, args["command"], args.get("timeout", 60))
+                elif name == "development_share":
+                    result = self.development.share(agent, args.get("action", "status"), args.get("user_approved", False))
+                else:
+                    result = self.development.preview(agent, args.get("action", "status"), args.get("command", ""))
+                return {**result, "owner_agent_id": agent["id"], "scope": "agent_workspace_only",
+                        "preview_namespace": "hapic-preview-" + agent["id"],
+                        "isolation": "El servidor valida propietario e instalación antes de iniciar, reemplazar o detener. No puede operar vistas previas de otros agentes."}
         if name in CATALOG["youtube"]["actions"]:
             binding = self.store.one("SELECT * FROM agent_tools WHERE agent_id=? AND tool_id='youtube' AND enabled=1", (agent["id"],))
             if not binding or not binding["connection_id"]:
@@ -280,7 +290,7 @@ class Service:
             if not binding or not binding["connection_id"]:
                 raise ValueError("HeyGen está pendiente de conexión. Selecciona una cuenta en Herramientas para este agente.")
             connection_id = binding["connection_id"]
-            self.heygen.connection(project["id"], connection_id)
+            connection = self.heygen.connection(project["id"], connection_id)
             if name == "heygen_generate_video":
                 valid_content(args.get("prompt", ""))
                 result = self.heygen.generate(agent, connection_id, args)
@@ -288,13 +298,31 @@ class Service:
                 return result
             if name == "heygen_get_video":
                 return self.heygen.get(project["id"], args["video_id"], agent["id"], connection_id)
-            return self.heygen.list_jobs(project["id"], agent["id"], connection_id)
+            return {**self.heygen.list_jobs(project["id"], agent["id"], connection_id),
+                    "connection": {key: connection[key] for key in ("id", "provider", "account_name", "status")},
+                    "message": "La cuenta está asignada y su configuración está conectada. Una lista vacía solo significa que este agente todavía no tiene vídeos; no implica que falte conectar la cuenta."}
         if name == "get_ux_template" and agent["kind"] == "hapic":
             return load_template("ux")
         if name == "list_agent_templates":
             return {"templates": [load_template(kind) for kind in SPECIALISTS]}
+        if name == "restart_specialist_agent":
+            if agent["kind"] != "hapic":
+                raise PermissionError("Solo Hapic puede recuperar especialistas.")
+            target = self.agent(args["agent_id"])
+            if target["project_id"] != project["id"] or target["kind"] == "hapic":
+                raise PermissionError("Selecciona un especialista del mismo proyecto.")
+            if not self.lock(target["id"]).acquire(blocking=False):
+                raise RuntimeUnavailable("El especialista tiene un turno o provisión activo. No se ha interrumpido.")
+            result = self.provision(target["id"], lock_acquired=True, renew_session=True)
+            return {"id": result["id"], "name": result["name"], "status": result["status"],
+                    "restarted": result["status"] == "running", "error": result["error"]}
         if name == "list_project_agents":
-            return {"agents": self.store.all("SELECT id,name,kind,planner_id,status FROM agents WHERE project_id=?", (project["id"],))}
+            agents = self.store.all("SELECT id,name,kind,planner_id,status FROM agents WHERE project_id=?", (project["id"],))
+            for item in agents:
+                item["tools"] = self.store.all("""SELECT b.tool_id,b.enabled,b.connection_id,c.status AS connection_status
+                    FROM agent_tools b LEFT JOIN connections c ON c.id=b.connection_id AND c.project_id=?
+                    WHERE b.agent_id=?""", (project["id"], item["id"]))
+            return {"agents": agents}
         if name in {"create_ux_agent", "create_specialist_agent"} and agent["kind"] == "hapic":
             kind = "ux" if name == "create_ux_agent" else args["template"]
             if kind not in SPECIALISTS:

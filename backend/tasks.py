@@ -48,7 +48,18 @@ class Tasks:
                     content += '\nConsulta los archivos y el resultado de esta tarea.'
                 content += '\n\nEntrega registrada; la presencia de archivos no demuestra por sí sola que todo funcione.'
             elif task['state'] in {'failed', 'blocked'}:
-                content += '\n' + (task['result'] or 'Revisa la actividad y los avances antes de repetir la tarea.')
+                detail = task['result'] or 'Revisa la actividad y los avances antes de repetir la tarea.'
+                try:
+                    record = json.loads(detail)
+                    if isinstance(record, dict):
+                        detail = str(record.get('answer', 'Entrega incompleta.'))
+                        missing = record.get('missing_media', {})
+                        if missing:
+                            labels_media = {'images': 'imágenes', 'videos': 'vídeos MP4'}
+                            detail += '\nFaltan: ' + ', '.join(f"{count} {labels_media.get(kind, kind)}" for kind, count in missing.items())
+                except (ValueError, TypeError):
+                    pass
+                content += '\n' + detail
             elif task['state'] == 'queued':
                 content += '\nSe ejecutará en segundo plano cuando tenga turno y sus dependencias estén entregadas.'
             content += '\nTarea: ' + task['id']
@@ -143,7 +154,7 @@ class Tasks:
             raise LookupError('Tarea no encontrada en este proyecto.')
         return row
 
-    def create(self, caller, agent_id, objective, context, dependencies, expected_files):
+    def create(self, caller, agent_id, objective, context, dependencies, expected_files, expected_images=0, expected_videos=0):
         from .service import safe_path, valid_content
         from .images import IMAGE_TYPES
         from pathlib import Path
@@ -154,6 +165,8 @@ class Tasks:
         if not objective.strip() or len(dependencies) > 20 or not 1 <= len(expected_files) <= 20:
             raise ValueError('Indica objetivo y entre 1 y 20 archivos esperados; máximo 20 dependencias.')
         valid_content(objective + context)
+        if any(type(value) is not int or not 0 <= value <= 20 for value in (expected_images, expected_videos)):
+            raise ValueError('Indica entre 0 y 20 imágenes/vídeos por tarea, según lo autorizado.')
         for dep in dependencies:
             self.get(caller, dep)
         for path in expected_files:
@@ -161,7 +174,8 @@ class Tasks:
             safe_path(self.store.agent_path(target) / 'workspace', path, writing=True, image=suffix in IMAGE_TYPES, video=suffix == '.mp4')
         task_id = uid('task')
         contract = json.dumps(dict(objective=objective, context=context, dependencies=dependencies,
-                                   expected_files=expected_files), ensure_ascii=False)
+                                   expected_files=expected_files,
+                                   expected_media=dict(images=expected_images, videos=expected_videos)), ensure_ascii=False)
         with self.store.db() as db:
             db.execute('BEGIN IMMEDIATE')
             count = db.execute('SELECT count(*) FROM tasks WHERE project_id=?', (caller['project_id'],)).fetchone()[0]
@@ -222,6 +236,15 @@ class Tasks:
                     evidence.append(dict(path=relative, bytes=len(data), sha256=hashlib.sha256(data).hexdigest()))
                 media = self.store.all("SELECT i.path FROM images i JOIN messages m ON i.message_id=m.id WHERE i.agent_id=? AND m.source='artifact' AND m.created_at>=? UNION SELECT v.path FROM video_jobs v JOIN messages m ON v.message_id=m.id WHERE v.agent_id=? AND v.path IS NOT NULL AND m.created_at>=?", (agent['id'], started_at, agent['id'], started_at))
                 prefix = f"agents/{agent['id']}/workspace/"
+                # A recovery may deliver an existing artifact without billing another generation.
+                references = answer + contract['context'] + prior_results
+                existing = self.store.all("SELECT path FROM images WHERE agent_id=? UNION SELECT path FROM video_jobs WHERE agent_id=? AND path IS NOT NULL", (agent['id'], agent['id']))
+                seen = {item['path'] for item in media}
+                for item in existing:
+                    relative = item['path'].removeprefix(prefix)
+                    if item['path'].startswith(prefix) and relative in references and item['path'] not in seen:
+                        media.append(item)
+                        seen.add(item['path'])
                 for item in media:
                     relative = item['path'].removeprefix(prefix)
                     if not item['path'].startswith(prefix) or any(e['path'] == relative for e in evidence):
@@ -229,19 +252,26 @@ class Tasks:
                     path, _ = artifact_file(self.service, agent['project_id'], item['path'])
                     data = path.read_bytes()
                     evidence.append(dict(path=relative, bytes=len(data), sha256=hashlib.sha256(data).hexdigest()))
-                result = json.dumps(dict(answer=answer[:20000], evidence=evidence,
-                                         verification='Archivos presentes; funcionalidad pendiente de comprobar.'), ensure_ascii=False)
+                expected_media = contract.get('expected_media', {})
+                actual_media = {'images': sum(item['path'].lower().endswith(('.png', '.jpg', '.jpeg', '.webp')) for item in media),
+                                'videos': sum(item['path'].lower().endswith('.mp4') for item in media)}
+                missing_media = {kind: count - actual_media[kind] for kind, count in expected_media.items()
+                                 if kind in actual_media and count > actual_media[kind]}
+                result = json.dumps(dict(answer=answer[:20000], evidence=evidence, missing_media=missing_media,
+                                         verification='Faltan medios solicitados; el informe no sustituye la generación.' if missing_media else 'Archivos presentes; funcionalidad pendiente de comprobar.'), ensure_ascii=False)
                 self.store.message(agent['id'], 'assistant', answer[:20000], 'task')
-                state = 'delivered'
+                state = 'blocked' if missing_media else 'delivered'
             except asyncio.TimeoutError:
                 state, result = 'failed', 'La tarea alcanzó el límite de 10 minutos. Puede haber avances o ejecución remota pendiente; inspecciona antes de repetir.'
+            except RuntimeUnavailable as exc:
+                state, result = 'failed', str(exc)[:1000]
             except asyncio.CancelledError:
                 self.store.execute("UPDATE tasks SET state='failed',result=?,updated_at=? WHERE id=?", ('Interrumpida; inspecciona avances antes de crear una tarea de recuperación.', now(), task_id))
                 raise
             except Exception:
                 state, result = 'failed', 'No se comprobó la entrega. Inspecciona archivos/actividad; no se reintenta automáticamente.'
             self.store.execute('UPDATE tasks SET state=?,result=?,updated_at=? WHERE id=?', (state, result, now(), task_id))
-            self.store.event(agent['id'], 'Tarea ' + ('entregada' if state == 'delivered' else 'fallida') + ': ' + contract['objective'][:180])
+            self.store.event(agent['id'], 'Tarea ' + ({'delivered': 'entregada', 'blocked': 'bloqueada'}.get(state, 'fallida')) + ': ' + contract['objective'][:180])
             return self.get(caller, task_id)
         finally:
             lock.release()

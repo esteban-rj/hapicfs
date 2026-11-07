@@ -13,9 +13,9 @@ CATALOG = {
     },
     "development": {
         "id": "development", "name": "Entorno de desarrollo", "provider": "docker",
-        "description": "Python y Node: instala dependencias, ejecuta código y pruebas y abre una vista previa local del workspace del agente.",
+        "description": "Python y Node: ejecuta pruebas, abre una vista previa y comparte solo esa aplicación por un túnel HTTPS temporal cuando el usuario lo autoriza.",
         "access": "execute", "requires_connection": False,
-        "actions": ["development_run", "development_preview"],
+        "actions": ["development_run", "development_preview", "development_share"],
     },
     "youtube": {
         "id": "youtube",

@@ -117,6 +117,22 @@ def test_key_verification_encryption_assignment_and_restart(heygen_env):
     assert connect(heygen_env) == connection_id
 
 
+def test_empty_video_history_still_reports_the_assigned_connection(heygen_env):
+    _, service, _, _, project, agent = heygen_env
+    connection_id = connect(heygen_env)
+    result = service.tool(agent, "heygen_list_videos", {})
+    assert result["videos"] == []
+    assert result["connection"]["id"] == connection_id
+    assert result["connection"]["status"] == "connected"
+    assert KEY not in json.dumps(result)
+    hapic = service.store.one("SELECT * FROM agents WHERE project_id=? AND kind='hapic'", (project["id"],))
+    agents = service.tool(hapic, "list_project_agents", {})["agents"]
+    manager = next(item for item in agents if item["id"] == agent["id"])
+    binding = next(item for item in manager["tools"] if item["tool_id"] == "heygen")
+    assert binding["connection_id"] == connection_id and binding["connection_status"] == "connected"
+    assert KEY not in json.dumps(agents)
+
+
 @pytest.mark.parametrize("mode,scopes", [("read_only", []), ("custom", ["videos:read"])])
 def test_insufficient_permissions_do_not_store_key(heygen_env, mode, scopes):
     application, _, provider, client, project, _ = heygen_env

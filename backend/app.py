@@ -83,10 +83,15 @@ def create_app(data_dir: Path | None = None, runtime=None):
         return service.tool(scope(ctx), "development_preview", {"action": action, "command": command})
 
     @mcp.tool()
-    def create_task(agent_id: str, objective: str, context: str, dependencies: list[str], expected_files: list[str], ctx: Context) -> dict:
-        """Hapic asigna y ENCOLA automáticamente trabajo local a un especialista. Devuelve inmediatamente; la cola espera las dependencias (IDs previos). Hasta 10 minutos por tarea. No autoriza efectos externos."""
+    def development_share(ctx: Context, action: str = "status", user_approved: bool = False) -> dict:
+        """Comparte ÚNICAMENTE tu vista previa existente por HTTPS temporal. start requiere que el usuario haya solicitado/aceptado publicar el juego (user_approved=true); status consulta y stop cierra. No admite destinos ni comandos arbitrarios. Nunca expone Hapic. Máximo una hora y depende del PC/Docker. Reutiliza start/status; no recrees el túnel para consultar. Devuelve URL y comprobación HTTP, que NO prueba multijugador: comprueba QR y dos clientes a través de esa URL antes de declarar el juego verificado. No publica vídeos en redes."""
+        return service.tool(scope(ctx), "development_share", {"action": action, "user_approved": user_approved})
+
+    @mcp.tool()
+    def create_task(agent_id: str, objective: str, context: str, dependencies: list[str], expected_files: list[str], ctx: Context, expected_images: int = 0, expected_videos: int = 0) -> dict:
+        """Hapic asigna y ENCOLA automáticamente trabajo local a un especialista. Devuelve inmediatamente; espera dependencias (IDs previos), hasta 10 minutos por tarea. expected_images/expected_videos declaran cantidades autorizadas: el servidor exige medios reales, no solo informes. Usa cero para copy, planes o análisis. No autoriza efectos externos."""
         caller = scope(ctx)
-        task = service.tasks.create(caller, agent_id, objective, context, dependencies, expected_files)
+        task = service.tasks.create(caller, agent_id, objective, context, dependencies, expected_files, expected_images, expected_videos)
         return service.tasks.enqueue(caller, task['id'])
 
     @mcp.tool()
@@ -128,6 +133,11 @@ def create_app(data_dir: Path | None = None, runtime=None):
     def generate_project_image(prompt: str, ctx: Context, size: str = "1024x1024") -> dict:
         """Genera UNA imagen solicitada por el usuario con OpenAI Images (facturable). Guarda el PNG persistente y lo adjunta al chat. Tamaños: 1024x1024, 1536x1024, 1024x1536. No repetir si saved=true."""
         return service.tool(scope(ctx), "generate_project_image", {"prompt": prompt, "size": size})
+
+    @mcp.tool()
+    def restart_specialist_agent(agent_id: str, ctx: Context) -> dict:
+        """Hapic recupera el runtime de un especialista inactivo de ESTE proyecto, preservando archivos, plan y vista previa. Úsalo antes de recuperar una tarea que agotó tiempo, para detener el turno remoto anterior; nunca reinicies un agente con turno/provisión activo. No reintenta tareas, no genera medios ni administra otros proyectos."""
+        return service.tool(scope(ctx), "restart_specialist_agent", {"agent_id": agent_id})
 
     @mcp.tool()
     def publish_architecture_plan(content: str, ctx: Context) -> dict:
